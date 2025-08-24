@@ -6,7 +6,7 @@ from typing import Optional
 from lxml import html
 from tenacity import retry, stop_after_attempt, wait_exponential_jitter
 
-from .browser import open_page, wait_for_text, maybe_click
+from .browser import open_page, wait_for_text, maybe_click, wait_for_any_text
 from .extractors import (
     get_title,
     get_price_text,
@@ -28,8 +28,15 @@ from .utils import extract_rightmove_id
 @retry(wait=wait_exponential_jitter(initial=1, max=5), stop=stop_after_attempt(3))
 async def scrape(page, url: str) -> Optional[Listing]:
     await open_page(page, url)
-    # Wait for a reliable page element
-    await wait_for_text(page, "Key features")
+    # Wait for any reliable marker to reduce timeouts across page variants
+    await wait_for_any_text(page, [
+        "Key features",
+        "Description",
+        "PROPERTY TYPE",
+        "TENURE",
+        "Guide Price",
+        "Price",
+    ], timeout_ms=15000)
 
     # Expand collapsible description and feature area to reveal the 'Show less' anchored facts
     await maybe_click(page, "Read full description")

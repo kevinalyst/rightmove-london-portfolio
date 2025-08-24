@@ -57,11 +57,15 @@ def scrape_seeds(
         from .models import Listing
         sem = asyncio.Semaphore(concurrency)
 
-        async with browser_context(cfg) as (_, __, page):
+        async with browser_context(cfg) as (_, context, _):
             async def worker(idx: int, url: str):
                 async with sem:
                     try:
-                        listing: Listing | None = await scrape(page, url)
+                        page = await context.new_page()
+                        try:
+                            listing: Listing | None = await scrape(page, url)
+                        finally:
+                            await page.close()
                         if listing is not None:
                             records.append(listing)
                             console.log(f"[{idx}/{len(urls)}] scraped: {url}")
@@ -233,11 +237,15 @@ def scrape_search(
     async def _scrape():
         from .models import Listing
         sem = asyncio.Semaphore(2)
-        async with browser_context(cfg) as (_, __, page):
+        async with browser_context(cfg) as (_, context, _):
             async def worker(idx: int, url: str):
                 async with sem:
                     try:
-                        listing: Listing | None = await scrape(page, url)
+                        page = await context.new_page()
+                        try:
+                            listing: Listing | None = await scrape(page, url)
+                        finally:
+                            await page.close()
                         if listing is not None:
                             records.append(listing)
                             console.log(f"[{idx}/{len(seeds)}] scraped: {url}")
