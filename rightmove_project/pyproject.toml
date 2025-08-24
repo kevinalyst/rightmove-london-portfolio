@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rightmove-scraper"
+version = "0.1.0"
+description = "Polite Rightmove listing scraper for personal research"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{ name = "Kevin Lee" }]
+dependencies = [
+  "playwright>=1.45.0",
+  "pydantic>=2.6.0",
+  "typer[all]>=0.12.0",
+  "pandas>=2.2.0",
+  "pyarrow>=15.0.0",
+  "tenacity>=8.2.0",
+  "rich>=13.7.0",
+  "python-dotenv>=1.0.1",
+  "lxml>=5.2.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.1.0",
+  "pytest-cov>=5.0.0",
+  "ruff>=0.5.0"
+]
+
+[project.scripts]
+rightmove-scraper = "rightmove_scraper.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
