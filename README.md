@@ -24,7 +24,19 @@ Quickstart (discovery-first, London)
    # edit .env: set ALLOW_DISCOVERY=true, adjust HEADLESS, delays, etc.
    touch consent.txt
 
-4) Discover London listings (writes out/discovered_seeds.csv)
+4) Run interactive script (recommended)
+   - One step to run discovery (adaptive or simple) and then scrape
+     ./scripts/run_discover_and_scrape.sh
+   - Prompts: query (null for none), min/max price, property type, start page, pages, use adaptive slicer
+   - Output: discovered CSVs in ./out and scraped listings file in ./out
+
+   Background run on a VM and check progress:
+   - Start (example: adaptive slicer for N1, page 1 only). Edit inputs as needed:
+     ALLOW_DISCOVERY=true nohup bash -lc 'printf "y\n\n300000\n450000\n\nN1\n1\n1\n" | ./scripts/run_discover_and_scrape.sh' > ./out/run.log 2>&1 & echo $! > ./out/run.pid
+   - Check progress (tail the log):
+     tail -f ./out/run.log
+
+5) Manual discovery (optional) — Discover London listings (writes out/discovered_seeds.csv)
    - London region is pre-set. Filter examples:
      PYTHONPATH=$PWD/src python -m rightmove_scraper.cli discover-search \
        --query "" \
@@ -37,7 +49,12 @@ Quickstart (discovery-first, London)
        --all \
        --out ./out
 
-5) Scrape discovered URLs (writes out/listings.csv)
+  - Adaptive discovery (full London coverage; writes out/discovered_adaptive_seeds.csv)
+    PYTHONPATH=$PWD/src python -m rightmove_scraper.cli discover-adaptive \
+      --min-price 300000 --max-price 450000 \
+      --out ./out
+
+6) Manual scrape (optional) — Scrape discovered URLs (writes out/listings.csv)
    - Use modest concurrency for reliability; increase timeout if needed
      PYTHONPATH=$PWD/src python -m rightmove_scraper.cli scrape-search \
        --query "" \
@@ -74,6 +91,7 @@ Environment (.env)
 
 CLI
 - discover-search (default flow) — find London listing URLs with filters
+- discover-adaptive — adaptive slicing discovery (borough → district → price)
 - scrape-search (default flow) — scrape discovered listing URLs
 - scrape-seeds (optional) — scrape explicit URLs from a file
 - dump-snapshots — save raw HTML pages for debugging/fixtures
@@ -83,6 +101,16 @@ Discovery notes
 - Region: London (locationIdentifier REGION^87490) is built-in.
 - Filters: use --min-price/--max-price, --type (flat|detached|semi-detached|terraced|bungalow), and --query.
 - Output: discovery writes `out/discovered_seeds.csv` with a header `url`.
+
+Adaptive discovery (slicer)
+- Goal: bypass Rightmove's ~1,050 browsable results cap per query by splitting into non-overlapping slices and merging + de-duping at the end.
+- Keep filters identical across slices (except the dimension being split). CAP is 1,000 results per slice.
+- Steps:
+  1) Start at London region. If total results ≤ 1,000, paginate and collect.
+  2) If > 1,000, split by postcode districts (OUTCODE^ codes) from a practical cheat sheet (e.g., E14, SW1, W11…). Districts are narrower and reduce volume.
+  3) If a district still exceeds 1,000, split the price range into non-overlapping sub-bands (e.g., [300k, 375k) and [375k, 450k)). Repeat until ≤ 1,000.
+- Counting: we read the total results from the page DOM/scripts to decide when to split.
+- Merge + de-dupe: after collecting all slices, we merge and de-duplicate by Rightmove property ID (from the URL). Output is `out/discovered_adaptive_seeds.csv`.
 
 Testing
 - pytest

@@ -1,21 +1,20 @@
 from __future__ import annotations
 
 import urllib.parse
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 from lxml import html
+import re
 
 
 RIGHTMOVE_HOST = "https://www.rightmove.co.uk"
 
 
-def build_london_search_url(query: str = "", min_price: int | None = None, max_price: int | None = None, property_type: str | None = None, page: int = 1) -> str:
-    # Use a canonical London search path; Rightmove uses query params in encoded form
-    # We keep it minimal and stable.
+def build_search_url(*, location_identifier: str, query: str = "", min_price: int | None = None, max_price: int | None = None, property_type: str | None = None, page: int = 1) -> str:
+    # Build a Rightmove search URL for a given locationIdentifier
     base = f"{RIGHTMOVE_HOST}/property-for-sale/find.html"
     params = {
-        # IMPORTANT: pass raw caret so urlencode produces %5E (avoid double-encoding)
-        "locationIdentifier": "REGION^87490",  # London region id
+        "locationIdentifier": location_identifier,
         "searchType": "SALE",
         "index": str((page - 1) * 24),
     }
@@ -28,6 +27,11 @@ def build_london_search_url(query: str = "", min_price: int | None = None, max_p
     if query:
         params["keywords"] = query
     return base + "?" + urllib.parse.urlencode(params)
+
+
+def build_london_search_url(query: str = "", min_price: int | None = None, max_price: int | None = None, property_type: str | None = None, page: int = 1) -> str:
+    # Backwards-compatible helper: London region id by default
+    return build_search_url(location_identifier="REGION^87490", query=query, min_price=min_price, max_price=max_price, property_type=property_type, page=page)
 
 
 def extract_listing_urls_from_search(html_text: str) -> List[str]:
@@ -52,6 +56,47 @@ def extract_listing_urls_from_search(html_text: str) -> List[str]:
         if u not in seen:
             seen.add(u)
             out.append(u)
-    return out
+    if out:
+        return out
+    # Fallback: extract property IDs from raw HTML (handles cases where links render via JSON)
+    try:
+        ids = re.findall(r"/properties/(\d+)", html_text)
+        out = []
+        seen = set()
+        for pid in ids:
+            u = f"{RIGHTMOVE_HOST}/properties/{pid}"
+            if u not in seen:
+                seen.add(u)
+                out.append(u)
+        return out
+    except Exception:
+        return []
+
+
+def extract_total_results_from_search(html_text: str) -> Optional[int]:
+    doc = html.fromstring(html_text)
+    # Heuristic: look for text like "12,345 results" or "X properties found"
+    full_text = " ".join(doc.xpath("//body//text()"))
+    patterns = [
+        r"(\d{1,3}(?:,\d{3})+|\d+)\s+results",
+        r"(\d{1,3}(?:,\d{3})+|\d+)\s+properties",
+        r'"resultCount"\s*:\s*"?(\d{1,3}(?:,\d{3})+|\d+)"?',
+    ]
+    for pat in patterns:
+        m = re.search(pat, full_text, flags=re.IGNORECASE)
+        if m:
+            try:
+                return int(m.group(1).replace(",", ""))
+            except Exception:
+                pass
+    # Fallback: search scripts only
+    scripts_text = "\n".join(doc.xpath("//script/text()"))
+    m = re.search(r'"resultCount"\s*:\s*"?(\d{1,3}(?:,\d{3})+|\d+)"?', scripts_text)
+    if m:
+        try:
+            return int(m.group(1).replace(",", ""))
+        except Exception:
+            return None
+    return None
 
 
