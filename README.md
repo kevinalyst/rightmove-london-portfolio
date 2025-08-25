@@ -30,7 +30,11 @@ Quickstart (discovery-first, London)
        --query "" \
        --min-price 300000 --max-price 1200000 \
        --type flat \
-       --pages 1 \
+       --start-page 1 --pages 1 \
+       --out ./out
+   - Crawl all pages until results end:
+     PYTHONPATH=$PWD/src python -m rightmove_scraper.cli discover-search \
+       --all \
        --out ./out
 
 5) Scrape discovered URLs (writes out/listings.csv)
@@ -39,8 +43,12 @@ Quickstart (discovery-first, London)
        --query "" \
        --min-price 300000 --max-price 1200000 \
        --type flat \
-       --pages 1 \
+       --start-page 1 --pages 1 \
        --out ./out --format csv --max 25
+   - Scrape all pages (discovery+scrape in one step):
+     PYTHONPATH=$PWD/src python -m rightmove_scraper.cli scrape-search \
+       --all \
+       --out ./out --format csv --max 1000
 
 Quickstart (optional manual seeds)
 1) Create seeds.csv with a header `url` and property URLs

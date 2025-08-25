@@ -140,7 +140,9 @@ def discover_search(
     min_price: Optional[int] = typer.Option(None, "--min-price"),
     max_price: Optional[int] = typer.Option(None, "--max-price"),
     property_type: Optional[str] = typer.Option(None, "--type", help="detached|semi-detached|flat|terraced|bungalow"),
-    pages: int = typer.Option(1, "--pages", min=1, max=10),
+    start_page: int = typer.Option(1, "--start-page", min=1, help="First page number (1-indexed)"),
+    pages: int = typer.Option(1, "--pages", min=1, help="How many pages to fetch from start-page"),
+    all: bool = typer.Option(False, "--all", help="Ignore --pages and paginate until no more results"),
     out: str = typer.Option("./out", "--out"),
 ):
     cfg = load_config()
@@ -157,7 +159,9 @@ def discover_search(
 
     async def _run():
         async with browser_context(cfg) as (_, __, page):
-            for p in range(1, pages + 1):
+            p = start_page
+            fetched_any = False
+            while True:
                 url = build_london_search_url(query=query, min_price=min_price, max_price=max_price, property_type=property_type, page=p)
                 await page.goto(url)
                 # Try to accept cookies/banner if present
@@ -175,6 +179,16 @@ def discover_search(
                 console.log(f"Page {p}: found {len(page_urls)} property URLs")
                 urls.extend(page_urls)
                 polite_sleep(cfg.min_delay_sec, cfg.max_delay_sec)
+                fetched_any = True
+                if all:
+                    if not page_urls:
+                        break
+                    p += 1
+                    continue
+                # not --all: stop after start_page + pages - 1
+                if p >= start_page + pages - 1:
+                    break
+                p += 1
 
     asyncio.run(_run())
 
@@ -197,7 +211,9 @@ def scrape_search(
     min_price: Optional[int] = typer.Option(None, "--min-price"),
     max_price: Optional[int] = typer.Option(None, "--max-price"),
     property_type: Optional[str] = typer.Option(None, "--type"),
-    pages: int = typer.Option(1, "--pages", min=1, max=10),
+    start_page: int = typer.Option(1, "--start-page", min=1),
+    pages: int = typer.Option(1, "--pages", min=1),
+    all: bool = typer.Option(False, "--all"),
     out: str = typer.Option("./out", "--out"),
     format: str = typer.Option("csv", "--format"),
     max: int = typer.Option(50, "--max", min=1),
@@ -216,13 +232,22 @@ def scrape_search(
 
     async def _discover():
         async with browser_context(cfg) as (_, __, page):
-            for p in range(1, pages + 1):
+            p = start_page
+            while True:
                 url = build_london_search_url(query=query, min_price=min_price, max_price=max_price, property_type=property_type, page=p)
                 await page.goto(url)
                 content = await page.content()
                 page_urls = extract_listing_urls_from_search(content)
                 discovered.extend(page_urls)
                 polite_sleep(cfg.min_delay_sec, cfg.max_delay_sec)
+                if all:
+                    if not page_urls:
+                        break
+                    p += 1
+                    continue
+                if p >= start_page + pages - 1:
+                    break
+                p += 1
 
     asyncio.run(_discover())
     if not discovered:
