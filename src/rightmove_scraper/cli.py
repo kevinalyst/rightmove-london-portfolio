@@ -439,34 +439,13 @@ def discover_adaptive(
             for idx, s in enumerate(final_slices, 1):
                 p = start_page or 1
                 console.log(f"[{idx}/{len(final_slices)}] Collecting {s.level}={s.name} price=[{s.price_min},{s.price_max})")
-                # Bound pagination by resultCount
-                try:
-                    total = await counter.count(
-                        s.location_identifier,
-                        min_price=s.price_min,
-                        max_price=s.price_max,
-                        query=query or "",
-                        property_type=property_type,
-                    )
-                except Exception:
-                    total = 0
-                max_pages = max(0, (total + 23) // 24)
-                if pages is not None:
-                    end_page = (start_page or 1) + pages - 1
-                    if max_pages:
-                        end_page = min(end_page, max_pages)
-                else:
-                    end_page = max_pages if max_pages else None
                 while True:
-                    # Use canonical Rightmove search URL for all slices
-                    url = build_search_url(
-                        location_identifier=s.location_identifier,
-                        query=query or "",
-                        min_price=s.price_min,
-                        max_price=s.price_max,
-                        property_type=property_type,
-                        page=p,
-                    )
+                    # For OUTCODE searches, Rightmove sometimes expects the search page with primaryLocation/value/andId
+                    if s.location_identifier.startswith("OUTCODE^"):
+                        outcode = s.location_identifier.split("^", 1)[1]
+                        url = f"https://www.rightmove.co.uk/property-for-sale/{outcode}.html?minPrice={(s.price_min or '')}&maxPrice={(s.price_max or '')}&index={(p-1)*24}&searchType=SALE"
+                    else:
+                        url = build_search_url(location_identifier=s.location_identifier, query=query or "", min_price=s.price_min, max_price=s.price_max, property_type=property_type, page=p)
                     await page.goto(url, wait_until="domcontentloaded")
                     # Try to accept cookies/banner if present
                     try:
@@ -492,8 +471,8 @@ def discover_adaptive(
                             pass
                         break
                     urls.extend(page_urls)
-                    # Stop by bound: either pages limit or max_pages from resultCount
-                    if end_page is not None and p >= end_page:
+                    # If pages limit set, stop after desired number
+                    if pages is not None and p >= (start_page or 1) + pages - 1:
                         break
                     p += 1
                     polite_sleep(cfg.min_delay_sec, cfg.max_delay_sec)
@@ -688,28 +667,16 @@ def discover_from_plan(
                 p = start_page or 1
                 console.log(f"[{i+1}/{len(slices_data)}] Collecting {name} price=[{pmin},{pmax})")
                 slice_urls: list[str] = []
-                # Bound pagination by reported resultCount on page 1
-                total = 0
-                try:
-                    url0 = build_search_url(location_identifier=loc, query=q or "", min_price=pmin, max_price=pmax, property_type=t, page=1)
-                    await page.goto(url0, wait_until="domcontentloaded")
-                    try:
-                        await page.get_by_role("button", name="Accept all").click(timeout=1500)
-                    except Exception:
-                        pass
-                    content0 = await page.content()
-                    total = extract_total_results_from_search(content0) or 0
-                except Exception:
-                    total = 0
-                max_pages = max(0, (total + 23) // 24)
-                if pages is not None:
-                    end_page = (start_page or 1) + pages - 1
-                    if max_pages:
-                        end_page = min(end_page, max_pages)
-                else:
-                    end_page = max_pages if max_pages else None
                 while True:
-                    url = build_search_url(location_identifier=loc, query=q or "", min_price=pmin, max_price=pmax, property_type=t, page=p)
+                    if loc.startswith("OUTCODE^"):
+                        outcode = loc.split("^", 1)[1]
+                        url = f"https://www.rightmove.co.uk/property-for-sale/{outcode}.html?searchType=SALE&index={(p-1)*24}"
+                        if pmin is not None:
+                            url += f"&minPrice={pmin}"
+                        if pmax is not None:
+                            url += f"&maxPrice={pmax}"
+                    else:
+                        url = build_search_url(location_identifier=loc, query=q or "", min_price=pmin, max_price=pmax, property_type=t, page=p)
                     await page.goto(url, wait_until="domcontentloaded")
                     try:
                         await page.get_by_role("button", name="Accept all").click(timeout=1500)
@@ -732,7 +699,7 @@ def discover_from_plan(
                             pass
                         break
                     slice_urls.extend(page_urls)
-                    if end_page is not None and p >= end_page:
+                    if pages is not None and p >= (start_page or 1) + pages - 1:
                         break
                     p += 1
                     polite_sleep(cfg.min_delay_sec, cfg.max_delay_sec)
