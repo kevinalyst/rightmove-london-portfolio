@@ -65,7 +65,7 @@ touch consent.txt
 ```
 
 ### 3) Rightmove pagination cap and how the adaptive slicer bypasses it
-- Rightmove limits browseable results for a single search to ~1,050 items (24 per page → ~44 pages). Beyond that, listings aren’t accessible by pagination alone.
+- Rightmove limits browseable results for a single search to ~1,050 items (25 per page → ~42 pages). Beyond that, listings aren’t accessible by pagination alone.
 - The adaptive slicer avoids this by partitioning the search space into non‑overlapping “slices” that each fall under the cap:
   - Start with London region (REGION^87490).
   - Split into postcode districts (OUTCODE^… like E14, SW1, W11, etc.).
