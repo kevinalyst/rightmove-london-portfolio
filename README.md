@@ -1,4 +1,4 @@
-### Compliance banner
+# Rightmove London Property Scraper
 
 - **Personal use only**: This scraper is for personal, non-commercial research.
 - **Respect the site**: Follow Rightmove Terms of Use and robots. Scrape gently.
@@ -51,7 +51,7 @@ touch consent.txt
     - **Start page / Pages per slice**: leave blank to discover until the true end per slice
   - Behavior:
     - Uses canonical Rightmove search URLs with your filters.
-    - Bounds pagination by the live `resultCount` from page 1 to avoid “ghost pages”.
+    - Bounds pagination by the live `resultCount` from page 1 to avoid "ghost pages".
     - Writes per-slice CSVs to `out/per_slice/…` with columns: `rightmove_id,url,slicer_name`.
     - Merges de-duplicated URLs across slices into `out/discovered_adaptive_seeds.csv`.
 ```bash
@@ -81,10 +81,57 @@ touch consent.txt
   - **Counting**: We drive a headless browser to the canonical Rightmove search URL with your filters, wait for `domcontentloaded`, and extract `resultCount` from the DOM/scripts.
   - **Discovery**: For each final slice, we paginate using the canonical search URL and stop at `ceil(resultCount/24)` pages, de-duplicating URLs by property ID.
 
+### CLI
+
+- discover-search (default flow) — find London listing URLs with filters
+- discover-adaptive — adaptive slicing discovery (borough → district → price)
+- scrape-search (default flow) — scrape discovered listing URLs
+- scrape-seeds (optional) — scrape explicit URLs from a file
+- dump-snapshots — save raw HTML pages for debugging/fixtures
+- validate — basic column check for generated CSV
+
+### Discovery notes
+
+- Region: London (locationIdentifier REGION^87490) is built-in.
+- Filters: use --min-price/--max-price, --type (flat|detached|semi-detached|terraced|bungalow), and --query.
+- Output: discovery writes `out/discovered_seeds.csv` with a header `url`.
+
+### Adaptive discovery (slicer)
+
+- Goal: bypass Rightmove's ~1,050 browsable results cap per query by splitting into non-overlapping slices and merging + de-duping at the end.
+- Keep filters identical across slices (except the dimension being split). CAP is 1,000 results per slice.
+- Steps:
+  1) Start at London region. If total results ≤ 1,000, paginate and collect.
+  2) If > 1,000, split by postcode districts (OUTCODE^ codes) from a practical cheat sheet (e.g., E14, SW1, W11…). Districts are narrower and reduce volume.
+  3) If a district still exceeds 1,000, split the price range into non-overlapping sub-bands (e.g., [300k, 375k) and [375k, 450k)). Repeat until ≤ 1,000.
+- Counting: we read the total results from the page DOM/scripts to decide when to split.
+- Merge + de-dupe: after collecting all slices, we merge and de-duplicate by Rightmove property ID (from the URL). Output is `out/discovered_adaptive_seeds.csv`.
+
+### Testing
+
+- pytest
+- Unit tests run against HTML snapshots in tests/fixtures/html/
+
+### ComplianceGuard
+
+- On startup, a visible warning prints.
+- Programmatic discovery remains disabled unless you have both env ALLOW_DISCOVERY=true and a local consent.txt.
+
+### Notes
+
+- If a listing is removed by the agent, we return a partial record with description="Removed by agent".
+- "Ask agent" values are preserved as-is.
+
+### Performance tips
+
+- Keep concurrency modest (e.g., 2) and timeouts around 20–30s for reliability.
+- We block images/media/fonts to speed up page loads and auto-accept cookies when present.
+- If you hit intermittent timeouts, re-run failed URLs with lower concurrency or a higher timeout.
+
 ### Common troubleshooting
 
 - **Discovery disabled**: Ensure `.env` has `ALLOW_DISCOVERY=true` and `consent.txt` exists.
-- **“.env parse” error**: The file must contain `KEY=VALUE` lines only. Remove stray text or use `#` for comments. Do not paste prose into `.env`.
+- **".env parse" error**: The file must contain `KEY=VALUE` lines only. Remove stray text or use `#` for comments. Do not paste prose into `.env`.
 - **Playwright not installed**: Run `python -m playwright install --with-deps`.
 - **Timeouts on discovery**: We use `domcontentloaded` plus an explicit wait for cards. If your network is slow, raise `REQUEST_TIMEOUT` in `.env` (e.g., 60–90).
 - **Deep pages return few/zero URLs**: The tool now uses canonical URLs and bounds pagination by the live `resultCount`, avoiding ghost pages. If you still see issues, re-run with a fresh plan or allow min/max to be null so the slicer can price-split more aggressively.
