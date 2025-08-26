@@ -5,6 +5,8 @@ from typing import Iterable, List, Optional, Tuple
 
 
 CAP = 1000
+DEFAULT_MIN_PRICE = 0
+DEFAULT_MAX_PRICE = 10_000_000  # 10M upper bound for adaptive price partitioning
 
 
 @dataclass(frozen=True)
@@ -87,7 +89,13 @@ def borough_slices() -> list[str]:
 
 
 def split_price(range_min: int, range_max: int) -> tuple[tuple[int, int], tuple[int, int]]:
-    mid = int(((range_min + range_max) / 2) // 5000 * 5000)
+    # Choose a midpoint at 5k granularity, ensuring strictly increasing bounds
+    mid_raw = (range_min + range_max) // 2
+    mid = int((mid_raw // 5000) * 5000)
+    if mid <= range_min:
+        mid = range_min + 5000
+    if mid >= range_max:
+        mid = range_max - 5000
     return (range_min, mid), (mid, range_max)
 
 
@@ -111,6 +119,8 @@ async def partition(
     initial_slice: Slice,
     result_counter: ResultCounter,
     district_provider: callable | None,
+    query: str,
+    property_type: Optional[str],
 ) -> Iterable[Slice]:
     # DFS partitioning adhering to CAP
     stack: list[Slice] = [initial_slice]
@@ -122,8 +132,8 @@ async def partition(
             current.location_identifier,
             min_price=current.price_min,
             max_price=current.price_max,
-            query="",
-            property_type=None,
+            query=query,
+            property_type=property_type,
         )
         if n <= CAP:
             out.append(current)
@@ -162,11 +172,16 @@ async def partition(
                     )
                 continue
 
-        if current.level == "district" and current.price_min is not None and current.price_max is not None:
-            (a_lo, a_hi), (b_lo, b_hi) = split_price(current.price_min, current.price_max)
-            stack.append(current.with_price(a_lo, a_hi))
-            stack.append(current.with_price(b_lo, b_hi))
-            continue
+        if current.level == "district":
+            # Allow price splitting even when initial bounds are None by using default bounds
+            eff_min = current.price_min if current.price_min is not None else DEFAULT_MIN_PRICE
+            eff_max = current.price_max if current.price_max is not None else DEFAULT_MAX_PRICE
+            # Only split if we have meaningful width to avoid zero-width segments
+            if eff_max - eff_min > 10_000:  # ensure both halves at least 5k wide
+                (a_lo, a_hi), (b_lo, b_hi) = split_price(eff_min, eff_max)
+                stack.append(current.with_price(a_lo, a_hi))
+                stack.append(current.with_price(b_lo, b_hi))
+                continue
 
         # If we cannot split further, accept as-is to avoid infinite loop
         out.append(current)

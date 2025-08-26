@@ -1,132 +1,93 @@
-# Rightmove Personal Research Scraper (Python)
+### Compliance banner
 
-Important: This tool is for personal, non-commercial research only. Respect the Rightmove Terms of Use and robots, and scrape gently.
+- **Personal use only**: This scraper is for personal, non-commercial research.
+- **Respect the site**: Follow Rightmove Terms of Use and robots. Scrape gently.
+- **Guardrails**: Discovery is disabled unless both `ALLOW_DISCOVERY=true` in `.env` and a `consent.txt` file exist in the project root.
 
-Compliance banner
-- Strict politeness defaults: random delays, retries; resource blocking for speed
-- The recommended/default workflow uses discovery (search → scrape). Manual seeds are optional.
-- To run discovery, set ALLOW_DISCOVERY=true and create a local file consent.txt in the project root.
+### Quickstart
 
-Quickstart (discovery-first, London)
-1) Create and activate Python 3.11+ environment
-   - macOS zsh example
-     python3 -m venv .venv
-     source .venv/bin/activate
-     pip install -U pip
+- **1) Environment setup and install**
+  - Create and activate a Python 3.11+ virtualenv (macOS zsh example):
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+```
+  - Install package and Playwright browsers:
+```bash
+pip install -e '.[dev]'
+python -m playwright install --with-deps
+```
+  - Configure `.env` and consent:
+```bash
+nano .env
+# Required to enable discovery
+ALLOW_DISCOVERY=true
+# Optional tuning
+HEADLESS=true
+REQUEST_TIMEOUT=45
+MIN_DELAY_SEC=2.0
+MAX_DELAY_SEC=5.0
+OUTPUT_DIR=./out
+OUTPUT_FORMAT=csv
+LOG_LEVEL=INFO
+# USER_AGENT=Your desktop UA string (optional)
 
-2) Install package and browsers
-   - quote extras in zsh
-     pip install -e '.[dev]'
-     python -m playwright install --with-deps
+touch consent.txt
+```
 
-3) Configure .env and consent (enables discovery)
-   cp .env.example .env
-   # edit .env: set ALLOW_DISCOVERY=true, adjust HEADLESS, delays, etc.
-   touch consent.txt
+- **2) Use `scripts/adaptive_slicer.sh` (plan generator)**
+  - This prompts for filters (query, min/max price, property type) and generates a slice plan that partitions London into non-overlapping slices.
+  - Plan is saved under `out/<query-or-n>/<min-or-n>/<max-or-n>/<type-or-n>.txt`, for example: `out/n/300000/450000/n.txt` or `out/n/n/n/n.txt` when filters are null.
+  - Output: prints the plan filepath; keep it for the next step.
+```bash
+./scripts/adaptive_slicer.sh
+```
 
-4) Run interactive script (recommended)
-   - One step to run discovery (adaptive or simple) and then scrape
-     ./scripts/run_discover_and_scrape.sh
-   - Prompts: query (null for none), min/max price, property type, start page, pages, use adaptive slicer
-   - Output: discovered CSVs in ./out and scraped listings file in ./out
+- **3) Use `scripts/discover_urls.sh` (discover per slice + merge)**
+  - Prompts:
+    - **Path to adaptive plan txt**: the plan produced above
+    - **Start slice index**: 1-based integer (e.g., 1). Not a name.
+    - **Start page / Pages per slice**: leave blank to discover until the true end per slice
+  - Behavior:
+    - Uses canonical Rightmove search URLs with your filters.
+    - Bounds pagination by the live `resultCount` from page 1 to avoid “ghost pages”.
+    - Writes per-slice CSVs to `out/per_slice/…` with columns: `rightmove_id,url,slicer_name`.
+    - Merges de-duplicated URLs across slices into `out/discovered_adaptive_seeds.csv`.
+```bash
+./scripts/discover_urls.sh
+```
 
-   Background run on a VM and check progress:
-   - Start (example: adaptive slicer for N1, page 1 only). Edit inputs as needed:
-     ALLOW_DISCOVERY=true nohup bash -lc 'printf "y\n\n300000\n450000\n\nN1\n1\n1\n" | ./scripts/run_discover_and_scrape.sh' > ./out/run.log 2>&1 & echo $! > ./out/run.pid
-   - Check progress (tail the log):
-     tail -f ./out/run.log
+- **4) Use `scripts/run_scrape.sh` (scrape listings with resume + batches)**
+  - Prompts:
+    - **Start from Rightmove ID**: enter a numeric ID to resume from, or leave blank to start from the first URL.
+  - Behavior:
+    - Reads `out/discovered_adaptive_seeds.csv` and scrapes listing pages.
+    - Shows progress and saves a batch output every 100 listings to `out/batches/`.
+    - Writes aggregated `out/listings.csv` when done.
+```bash
+./scripts/run_scrape.sh
+```
 
-5) Manual discovery (optional) — Discover London listings (writes out/discovered_seeds.csv)
-   - London region is pre-set. Filter examples:
-     PYTHONPATH=$PWD/src python -m rightmove_scraper.cli discover-search \
-       --query "" \
-       --min-price 300000 --max-price 1200000 \
-       --type flat \
-       --start-page 1 --pages 1 \
-       --out ./out
-   - Crawl all pages until results end:
-     PYTHONPATH=$PWD/src python -m rightmove_scraper.cli discover-search \
-       --all \
-       --out ./out
+### Rightmove pagination cap and how we bypass it
 
-  - Adaptive discovery (full London coverage; writes out/discovered_adaptive_seeds.csv)
-    PYTHONPATH=$PWD/src python -m rightmove_scraper.cli discover-adaptive \
-      --min-price 300000 --max-price 450000 \
-      --out ./out
+- **The cap**: Rightmove only exposes ~1,050 browsable results per query. Practically, this manifests as a limited number of paginated pages even if more listings exist.
+- **Our approach (adaptive slicer)**:
+  - **CAP per slice**: We target ≤1,000 results per slice (`CAP=1000`).
+  - **Partitioning strategy**:
+    1) Start from London borough coverage; count results for each.
+    2) If a borough slice exceeds CAP, partition by postcode districts (`OUTCODE^…`).
+    3) If a district still exceeds CAP, split the price range into non-overlapping bands (5k granularity) and recurse until ≤ CAP.
+  - **Counting**: We drive a headless browser to the canonical Rightmove search URL with your filters, wait for `domcontentloaded`, and extract `resultCount` from the DOM/scripts.
+  - **Discovery**: For each final slice, we paginate using the canonical search URL and stop at `ceil(resultCount/24)` pages, de-duplicating URLs by property ID.
 
-6) Manual scrape (optional) — Scrape discovered URLs (writes out/listings.csv)
-   - Use modest concurrency for reliability; increase timeout if needed
-     PYTHONPATH=$PWD/src python -m rightmove_scraper.cli scrape-search \
-       --query "" \
-       --min-price 300000 --max-price 1200000 \
-       --type flat \
-       --start-page 1 --pages 1 \
-       --out ./out --format csv --max 25
-   - Scrape all pages (discovery+scrape in one step):
-     PYTHONPATH=$PWD/src python -m rightmove_scraper.cli scrape-search \
-       --all \
-       --out ./out --format csv --max 1000
+### Common troubleshooting
 
-Quickstart (optional manual seeds)
-1) Create seeds.csv with a header `url` and property URLs
-   url\nhttps://www.rightmove.co.uk/properties/119387291
-2) Scrape the seeds
-   PYTHONPATH=$PWD/src python -m rightmove_scraper.cli scrape-seeds \
-     --input ./seeds.csv \
-     --out ./out \
-     --format csv \
-     --max 5
-
-Environment (.env)
-- USER_AGENT: Optional override
-- HEADLESS=true
-- MAX_CONCURRENCY=1
-- REQUEST_TIMEOUT=30
-- MIN_DELAY_SEC=2.0
-- MAX_DELAY_SEC=5.0
-- ALLOW_DISCOVERY=false
-- OUTPUT_DIR=./out
-- OUTPUT_FORMAT=csv (csv|parquet|sqlite)
-- LOG_LEVEL=INFO
-
-CLI
-- discover-search (default flow) — find London listing URLs with filters
-- discover-adaptive — adaptive slicing discovery (borough → district → price)
-- scrape-search (default flow) — scrape discovered listing URLs
-- scrape-seeds (optional) — scrape explicit URLs from a file
-- dump-snapshots — save raw HTML pages for debugging/fixtures
-- validate — basic column check for generated CSV
-
-Discovery notes
-- Region: London (locationIdentifier REGION^87490) is built-in.
-- Filters: use --min-price/--max-price, --type (flat|detached|semi-detached|terraced|bungalow), and --query.
-- Output: discovery writes `out/discovered_seeds.csv` with a header `url`.
-
-Adaptive discovery (slicer)
-- Goal: bypass Rightmove's ~1,050 browsable results cap per query by splitting into non-overlapping slices and merging + de-duping at the end.
-- Keep filters identical across slices (except the dimension being split). CAP is 1,000 results per slice.
-- Steps:
-  1) Start at London region. If total results ≤ 1,000, paginate and collect.
-  2) If > 1,000, split by postcode districts (OUTCODE^ codes) from a practical cheat sheet (e.g., E14, SW1, W11…). Districts are narrower and reduce volume.
-  3) If a district still exceeds 1,000, split the price range into non-overlapping sub-bands (e.g., [300k, 375k) and [375k, 450k)). Repeat until ≤ 1,000.
-- Counting: we read the total results from the page DOM/scripts to decide when to split.
-- Merge + de-dupe: after collecting all slices, we merge and de-duplicate by Rightmove property ID (from the URL). Output is `out/discovered_adaptive_seeds.csv`.
-
-Testing
-- pytest
-- Unit tests run against HTML snapshots in tests/fixtures/html/
-
-ComplianceGuard
-- On startup, a visible warning prints.
-- Programmatic discovery remains disabled unless you have both env ALLOW_DISCOVERY=true and a local consent.txt.
-
-Notes
-- If a listing is removed by the agent, we return a partial record with description="Removed by agent".
-- “Ask agent” values are preserved as-is.
-
-Performance tips
-- Keep concurrency modest (e.g., 2) and timeouts around 20–30s for reliability.
-- We block images/media/fonts to speed up page loads and auto-accept cookies when present.
-- If you hit intermittent timeouts, re-run failed URLs with lower concurrency or a higher timeout.
-
-
+- **Discovery disabled**: Ensure `.env` has `ALLOW_DISCOVERY=true` and `consent.txt` exists.
+- **“.env parse” error**: The file must contain `KEY=VALUE` lines only. Remove stray text or use `#` for comments. Do not paste prose into `.env`.
+- **Playwright not installed**: Run `python -m playwright install --with-deps`.
+- **Timeouts on discovery**: We use `domcontentloaded` plus an explicit wait for cards. If your network is slow, raise `REQUEST_TIMEOUT` in `.env` (e.g., 60–90).
+- **Deep pages return few/zero URLs**: The tool now uses canonical URLs and bounds pagination by the live `resultCount`, avoiding ghost pages. If you still see issues, re-run with a fresh plan or allow min/max to be null so the slicer can price-split more aggressively.
+- **Start slice input**: It must be a 1-based integer index, not a slice name like `WC2`.
+- **Resuming scrape**: In `run_scrape.sh`, provide a `rightmove_id` present in your seeds file. The scraper will filter seeds `>=` that ID and continue.
+- **Batch outputs**: Scrape batches are written every 100 records into `out/batches/` for resilience.
