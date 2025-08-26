@@ -1,4 +1,4 @@
-# Rightmove Personal Research Scraper (Python)
+# Rightmove London Property Scraper
 
 Important: This tool is for personal, non-commercial research only. Respect the Rightmove Terms of Use and robots, and scrape gently.
 
@@ -20,15 +20,33 @@ Quickstart (discovery-first, London)
      python -m playwright install --with-deps
 
 3) Configure .env and consent (enables discovery)
-   cp .env.example .env
-   # edit .env: set ALLOW_DISCOVERY=true, adjust HEADLESS, delays, etc.
-   touch consent.txt
-
-4) Run interactive script (recommended)
+   - Create .env
+     nano .env
+   - edit .env: set ALLOW_DISCOVERY=true, adjust HEADLESS, delays, etc.
+     USER_AGENT: Optional override
+     HEADLESS=true
+     MAX_CONCURRENCY=1
+     REQUEST_TIMEOUT=30
+     MIN_DELAY_SEC=2.0
+     MAX_DELAY_SEC=5.0
+     ALLOW_DISCOVERY=true
+     OUTPUT_DIR=./out
+     OUTPUT_FORMAT=csv (csv|parquet|sqlite)
+     LOG_LEVEL=INFO
+4) Go to Rightmove.com and search for the property the way you used to be, and on the search results page:
+<img width="1401" height="264" alt="Screenshot 2025-08-25 at 22 11 24" src="https://github.com/user-attachments/assets/2f356e13-df32-4d44-a00a-8c28be0aa142" />
+   - The results on the left, if that number > 1000, then you should turn on the adaptive slicer later in the interactive script; otherwise, you should leave that off for better performance
+   - 'Add keyword' corresponding to the query in the interactive script
+   - min/max price and property type are the same as the filter above
+5) Run interactive script
    - One step to run discovery (adaptive or simple) and then scrape
      ./scripts/run_discover_and_scrape.sh
-   - Prompts: query (null for none), min/max price, property type, start page, pages, use adaptive slicer
-   - Output: discovered CSVs in ./out and scraped listings file in ./out
+   - Prompts: use adaptive slicer(see explanation below, recommend on)
+              query (null for none),
+              min/max price(null for none),
+              property type(null for all)
+      
+     Output: discovered CSVs in ./out and scraped listings file in ./out
 
    Background run on a VM and check progress:
    - Start (example: adaptive slicer for N1, page 1 only). Edit inputs as needed:
@@ -36,58 +54,6 @@ Quickstart (discovery-first, London)
    - Check progress (tail the log):
      tail -f ./out/run.log
 
-5) Manual discovery (optional) — Discover London listings (writes out/discovered_seeds.csv)
-   - London region is pre-set. Filter examples:
-     PYTHONPATH=$PWD/src python -m rightmove_scraper.cli discover-search \
-       --query "" \
-       --min-price 300000 --max-price 1200000 \
-       --type flat \
-       --start-page 1 --pages 1 \
-       --out ./out
-   - Crawl all pages until results end:
-     PYTHONPATH=$PWD/src python -m rightmove_scraper.cli discover-search \
-       --all \
-       --out ./out
-
-  - Adaptive discovery (full London coverage; writes out/discovered_adaptive_seeds.csv)
-    PYTHONPATH=$PWD/src python -m rightmove_scraper.cli discover-adaptive \
-      --min-price 300000 --max-price 450000 \
-      --out ./out
-
-6) Manual scrape (optional) — Scrape discovered URLs (writes out/listings.csv)
-   - Use modest concurrency for reliability; increase timeout if needed
-     PYTHONPATH=$PWD/src python -m rightmove_scraper.cli scrape-search \
-       --query "" \
-       --min-price 300000 --max-price 1200000 \
-       --type flat \
-       --start-page 1 --pages 1 \
-       --out ./out --format csv --max 25
-   - Scrape all pages (discovery+scrape in one step):
-     PYTHONPATH=$PWD/src python -m rightmove_scraper.cli scrape-search \
-       --all \
-       --out ./out --format csv --max 1000
-
-Quickstart (optional manual seeds)
-1) Create seeds.csv with a header `url` and property URLs
-   url\nhttps://www.rightmove.co.uk/properties/119387291
-2) Scrape the seeds
-   PYTHONPATH=$PWD/src python -m rightmove_scraper.cli scrape-seeds \
-     --input ./seeds.csv \
-     --out ./out \
-     --format csv \
-     --max 5
-
-Environment (.env)
-- USER_AGENT: Optional override
-- HEADLESS=true
-- MAX_CONCURRENCY=1
-- REQUEST_TIMEOUT=30
-- MIN_DELAY_SEC=2.0
-- MAX_DELAY_SEC=5.0
-- ALLOW_DISCOVERY=false
-- OUTPUT_DIR=./out
-- OUTPUT_FORMAT=csv (csv|parquet|sqlite)
-- LOG_LEVEL=INFO
 
 CLI
 - discover-search (default flow) — find London listing URLs with filters
