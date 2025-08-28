@@ -122,6 +122,48 @@ def scrape_seeds(
     console.log(f"Wrote {len(records)} records to {out_path}")
 
 
+@app.command("shard-seeds")
+def shard_seeds(
+    input: str = typer.Option(..., "--input", help="Path to seeds CSV/TXT with 'url' header or one URL per line"),
+    shards: int = typer.Option(20, "--shards", min=1, help="Number of output shards"),
+    out: str = typer.Option("./out/shards", "--out", help="Directory to write shard_XX.csv files"),
+):
+    """Split a seeds file into N ordered shards with roughly equal sizes.
+
+    Each shard is written as CSV with a single 'url' header, preserving original order.
+    """
+    from pathlib import Path as _Path
+    import csv as _csv
+
+    urls = load_seeds(input)
+    n = len(urls)
+    _Path(out).mkdir(parents=True, exist_ok=True)
+    if n == 0:
+        # Still emit empty shards with only headers for consistency
+        for i in range(shards):
+            shard_path = _Path(out) / f"shard_{i:02d}.csv"
+            with shard_path.open("w", newline="", encoding="utf-8") as f:
+                w = _csv.writer(f)
+                w.writerow(["url"])
+        typer.echo(f"No URLs found. Wrote {shards} empty shard files to {out}")
+        return
+
+    base = n // shards
+    rem = n % shards
+    start = 0
+    for i in range(shards):
+        count = base + (1 if i < rem else 0)
+        part = urls[start : start + count] if count > 0 else []
+        shard_path = _Path(out) / f"shard_{i:02d}.csv"
+        with shard_path.open("w", newline="", encoding="utf-8") as f:
+            w = _csv.writer(f)
+            w.writerow(["url"])
+            for u in part:
+                w.writerow([u])
+        start += count
+    typer.echo(f"Wrote {shards} shards to {out} (total URLs: {n})")
+
+
 @app.command("dump-snapshots")
 def dump_snapshots(
     input: str = typer.Option(..., "--input", help="Seeds CSV/TXT"),

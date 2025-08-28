@@ -1,0 +1,19 @@
+# Files excluded from upload to Google Cloud when using gcloud commands
+
+# VCS and environments
+.git
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+node_modules/
+.DS_Store
+*.log
+
+# Outputs (exclude all except shards)
+out/**
+!out/shards/**
+
+# Test caches
+.pytest_cache/

@@ -12,27 +12,27 @@ Important: This tool is for personal, non-commercial research only. Respect the 
 - 2.1 Environment setup and package install
   - Create and activate a Python 3.11+ venv (macOS zsh example):
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -U pip
-pip install -e '.[dev]'
-python -m playwright install --with-deps
+     python3 -m venv .venv
+     source .venv/bin/activate
+     pip install -U pip
+     pip install -e '.[dev]'
+     python -m playwright install --with-deps
 ```
   - Create `.env` and `consent.txt`:
 ```bash
 cat > .env << 'EOF'
 USER_AGENT=
-HEADLESS=true
-MAX_CONCURRENCY=1
+     HEADLESS=true
+     MAX_CONCURRENCY=1
 REQUEST_TIMEOUT=45
-MIN_DELAY_SEC=2.0
-MAX_DELAY_SEC=5.0
-ALLOW_DISCOVERY=true
-OUTPUT_DIR=./out
+     MIN_DELAY_SEC=2.0
+     MAX_DELAY_SEC=5.0
+     ALLOW_DISCOVERY=true
+     OUTPUT_DIR=./out
 OUTPUT_FORMAT=csv
-LOG_LEVEL=INFO
+     LOG_LEVEL=INFO
 EOF
-touch consent.txt
+   touch consent.txt
 ```
 
 - 2.2 Generate an adaptive slice plan (`scripts/adaptive_slicer.sh`)
