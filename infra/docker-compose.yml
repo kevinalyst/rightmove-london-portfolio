@@ -1,0 +1,11 @@
+version: "3.9"
+services:
+  scraper:
+    build:
+      context: ..
+      dockerfile: scraper/Dockerfile
+    env_file: ../.env.sample
+    volumes:
+      - ../out:/workspace/out
+    command: ["scrape-search", "--pages", "1", "--max", "5"]
+

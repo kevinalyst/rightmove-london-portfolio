@@ -1,0 +1,11 @@
+site_name: London Property Portfolio
+theme:
+  name: material
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Scraping: scraping.md
+  - Transformation: transformation.md
+  - Agents: agents.md
+docs_dir: docs
+

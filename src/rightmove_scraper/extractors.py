@@ -241,3 +241,155 @@ def get_agent(doc: html.HtmlElement) -> Optional[str]:
     return None
 
 
+# New helpers per template.csv
+
+def get_photo_urls(doc: html.HtmlElement, limit: int = 10) -> List[str]:
+    """Extract up to `limit` full-size photo URLs in order.
+
+    Heuristics:
+    - Look for meta itemprop contentUrl under the photo collage
+    - Fallback to <img> sources inside the photo collage/thumb strip
+    - De-duplicate and keep order
+    """
+    urls: List[str] = []
+    seen: set[str] = set()
+
+    # 1) Prefer itemprop contentUrl nodes
+    for xp in [
+        '//*[@data-testid="photo-collage"]//meta[@itemprop="contentUrl"]/@content',
+        '//meta[@itemprop="contentUrl" and contains(@content, "/IMG_")]/@content',
+    ]:
+        for u in doc.xpath(xp):
+            if isinstance(u, str) and u and u not in seen:
+                seen.add(u)
+                urls.append(u)
+                if len(urls) >= limit:
+                    return urls
+
+    # 2) Fallback to <img src> within collage/thumbs
+    for xp in [
+        '//*[@data-testid="photo-collage"]//img/@src',
+        '//img[contains(@src, "/IMG_")]/@src',
+    ]:
+        for u in doc.xpath(xp):
+            if isinstance(u, str) and u and u not in seen:
+                seen.add(u)
+                urls.append(u)
+                if len(urls) >= limit:
+                    return urls
+
+    return urls[:limit]
+
+
+def get_floorplan_url(doc: html.HtmlElement) -> Optional[str]:
+    """Extract a floorplan image URL if present.
+
+    Normalize resized variants to the original full-size URL by:
+    - Removing '/dir/' path segment (e.g., https://media.rightmove.co.uk/dir/88k/... -> https://media.rightmove.co.uk/88k/...)
+    - Stripping '_max_{WxH}' suffix before extension (e.g., _max_296x197.png -> .png)
+    """
+    candidates = [
+        '//img[contains(@src, "_FLP_")]/@src',
+        '//meta[@itemprop="image" and contains(@content, "_FLP_")]/@content',
+        '//a[contains(@href, "/floorplan")]/img/@src',
+    ]
+    def _normalize(u: str) -> str:
+        v = u
+        # Drop '/dir/' path segment
+        v = v.replace("/dir/", "/")
+        # Remove _max_{WxH} before extension
+        v = re.sub(r"_max_\d+x\d+(?=\.)", "", v)
+        return v
+
+    for xp in candidates:
+        vals = doc.xpath(xp)
+        for v in vals:
+            if isinstance(v, str) and v:
+                return _normalize(v)
+    return None
+
+
+def get_agent_address(doc: html.HtmlElement) -> Optional[str]:
+    """Extract the agent address block near 'About <agent>' or 'MARKETED BY'."""
+    # Try the aside contact panel address title tooltip
+    nodes = doc.xpath('//div[@class="OojFk4MTxFDKIfqreGNt0" and @title]')
+    if nodes:
+        t = nodes[0].get("title") or ""
+        t = t.strip()
+        if t:
+            # Address often contains newlines; normalize to lines separated by commas
+            return re.sub(r"\s*,?\s*\n\s*", ",\n", t)
+
+    # Fallback: textual block under About agent
+    for xp in [
+        '//*[self::h3][contains(., "About")]/following::*[contains(@class, "address")][1]',
+        '//*[contains(@class, "aboutAgent")]//*[contains(@class, "address")]'
+    ]:
+        nodes = doc.xpath(xp)
+        if nodes:
+            text = _text_content(nodes[0])
+            if text:
+                return text
+    return None
+
+
+def get_agent_phone(doc: html.HtmlElement) -> Optional[str]:
+    # Look for tel: links or displayed numbers near contact tray
+    for xp in [
+        '//a[starts-with(@href, "tel:")]/@href',
+        '//*[contains(@class, "contact-agent-tray")]//a[starts-with(@href, "tel:")]/@href',
+        '//a[contains(@href, "propertyId") and contains(., "Call agent")]/following::a[starts-with(@href, "tel:")][1]/@href'
+    ]:
+        vals = doc.xpath(xp)
+        for v in vals:
+            if isinstance(v, str) and v.startswith("tel:"):
+                num = re.sub(r"[^0-9]", "", v)
+                if num:
+                    # Keep local dialing format if present (e.g., 02039106089)
+                    return num
+    # Sometimes presented as plain text next to icon
+    txt_nodes = doc.xpath('//*[contains(@class, "contact-agent")]//*[contains(text(), "020") or contains(text(), "01") or contains(text(), "+44")]//text()')
+    if txt_nodes:
+        txt = "".join([t.strip() for t in txt_nodes]).strip()
+        m = re.search(r"(\+44\s?\d[\d\s]{8,}|0\d{9,})", txt)
+        if m:
+            return re.sub(r"\s+", "", m.group(1))
+    return None
+
+
+def get_lat_lng(doc: html.HtmlElement) -> tuple[Optional[float], Optional[float]]:
+    """Attempt to extract latitude/longitude from embedded scripts or map widgets.
+
+    If not present, return (None, None). Snapshot pages sometimes omit coordinates.
+    """
+    # Try JSON blobs on window.PAGE_MODEL/adInfo if present
+    script_texts = doc.xpath('//script[contains(text(), "propertyData")]//text()')
+    for s in script_texts:
+        try:
+            # Look for patterns like "latitude":51.xxx, "longitude":-0.xxx
+            mlat = re.search(r'\"latitude\"\s*:\s*(-?\d+\.\d+)', s)
+            mlng = re.search(r'\"longitude\"\s*:\s*(-?\d+\.\d+)', s)
+            if mlat and mlng:
+                return float(mlat.group(1)), float(mlng.group(1))
+        except Exception:
+            pass
+    return None, None
+
+
+def get_listing_history(doc: html.HtmlElement) -> Optional[str]:
+    """Extract recent listing history snippet (e.g., 'Reduced on 10/06/2025')."""
+    # The history often appears near the mortgage widget/price area
+    for xp in [
+        '//*[contains(@class, "_1q3dx8PQU8WWiT7uw7J9Ck")]//div[contains(@class, "_2nk2x6QhNB1UrxdI5KpvaF")]',
+        '//*[contains(., "Reduced on") or contains(., "Added on")]'
+    ]:
+        nodes = doc.xpath(xp)
+        for n in nodes:
+            txt = _text_content(n)
+            if not txt:
+                continue
+            m = re.search(r"(Reduced on\s+\d{2}/\d{2}/\d{4}|Added on\s+\d{2}/\d{2}/\d{4})", txt)
+            if m:
+                return m.group(1)
+    return None
+

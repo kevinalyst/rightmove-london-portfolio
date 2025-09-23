@@ -19,10 +19,18 @@ from .extractors import (
     derive_from_key_features,
     get_fact_after_description,
     get_fact_grid_value,
+    get_photo_urls,
+    get_floorplan_url,
+    get_agent_address,
+    get_agent_phone,
+    get_lat_lng,
+    get_listing_history,
 )
 from .models import Listing
 from .normalize import coerce_int, normalize_tenure, normalize_council_tax, parse_price
 from .utils import extract_rightmove_id
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 @retry(wait=wait_exponential_jitter(initial=1, max=5), stop=stop_after_attempt(3))
@@ -47,6 +55,7 @@ async def scrape(page, url: str) -> Optional[Listing]:
 
     price_text = get_price_text(doc)
     price_value, price_currency = parse_price(price_text)
+    listing_history = get_listing_history(doc)
 
     property_type = get_summary_panel_value(doc, "PROPERTY TYPE")
     property_title = get_title(doc)
@@ -88,6 +97,8 @@ async def scrape(page, url: str) -> Optional[Listing]:
         or find_label_value_fuzzy(doc, ["Accessibility", "Lift", "Step free"]) 
     )
     estate_agent = get_agent(doc)
+    agent_address = get_agent_address(doc)
+    localnumber = get_agent_phone(doc)
 
     rightmove_id = extract_rightmove_id(url)
 
@@ -97,12 +108,22 @@ async def scrape(page, url: str) -> Optional[Listing]:
         if not description:
             description = "Removed by agent"
 
+    # Photos up to 10
+    photos = get_photo_urls(doc, limit=10)
+    # Normalize to exactly 10 entries by padding with None
+    photos = (photos + [None] * 10)[:10]
+
+    # Floorplan and coordinates
+    floorplan_url = get_floorplan_url(doc)
+    lat, lng = get_lat_lng(doc)
+
     return Listing(
         url=url,
         rightmove_id=rightmove_id,
         price_text=price_text,
         price_value=price_value,
         price_currency=price_currency,
+        listing_history=listing_history,
         property_type=property_type,
         property_title=property_title,
         bedrooms=bedrooms,
@@ -110,12 +131,28 @@ async def scrape(page, url: str) -> Optional[Listing]:
         sizes=sizes,
         tenure=tenure,
         estate_agent=estate_agent,
+        agent_address=agent_address,
+        localnumber=localnumber,
         key_features=key_features,
         description=description,
         council_tax=council_tax,
         parking=parking,
         garden=garden,
         accessibility=accessibility,
+        photo_1=photos[0],
+        photo_2=photos[1],
+        photo_3=photos[2],
+        photo_4=photos[3],
+        photo_5=photos[4],
+        photo_6=photos[5],
+        photo_7=photos[6],
+        photo_8=photos[7],
+        photo_9=photos[8],
+        photo_10=photos[9],
+        floorplan=floorplan_url,
+        latitude=lat,
+        longitude=lng,
+        timestamp=datetime.now(ZoneInfo("Europe/London")).isoformat(),
     )
 
 
