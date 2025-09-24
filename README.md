@@ -28,15 +28,13 @@ Open the mini chatbot at `docs/index.html` (served by GitHub Pages when enabled)
 ### Architecture
 ```mermaid
 flowchart LR
-  A[Playwright Scraper (Cloud Run)] -->|CSV/Parquet| B[GCS]
-  B --> C[Snowflake Staging]
-  C --> D[CTEs Transform]
-  D --> E[RIGHTMOVE_ANALYSIS]
-  E --> F[Cortex Analyst]
-  E --> G[Cortex Search]
-  subgraph Adaptive Slicer
-  A
-  end
+  S[rightmove_scraper.cli] -->|10 listings| R[data/raw/listings_10.csv]
+  R --> T[pipeline/local_rightmove_transform.py]
+  T --> P[data/processed/listings_10_transformed.csv]
+  T --> Q[data/processed/listings_10_transformed.parquet]
+
+  UI[/docs (GitHub Pages)/] -->|Ask| API[Backend stubs]
+  API -->|Cortex call (optional)| SF[(Snowflake)]
 ```
 
 ### Demo
