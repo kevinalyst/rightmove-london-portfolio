@@ -8,13 +8,15 @@ Problems it solves
 - Fragile scraping due to dynamic content and anti‑bot mitigations.
 
 Core approach (how it should work)
-- Plan: Build an adaptive plan that partitions the search space (REGION → OUTCODE → price bands) so each slice stays under the cap.
-- Discover: Visit slice result pages, read counts, and collect unique listing URLs; merge and de‑dup to a single seeds file.
-- Scrape: Visit each listing and extract normalized fields into structured CSV. Support resume from a given `rightmove_id`.
+- Plan: Adaptive partitioning (REGION → OUTCODE → price bands) sized under the pagination cap.
+- Discover: Collect canonical URLs per slice; merge and de‑dup to seeds.
+- Scrape: Extract normalized fields → CSV/Parquet; batch/resume semantics.
+- Transform: Load to Snowflake (staging → CTE transforms → semantic view `RIGHTMOVE_ANALYSIS`).
+- Agents: Query with Cortex Analyst/Search over transformed data.
 
 Primary user workflows
-- Run slicer → discover → scrape via provided shell scripts with prompt‑driven parameters.
-- Monitor progress logs and incremental batch outputs; final merged CSV at `out/listings.csv`.
+- Run via Makefile: `make setup`, `make scrape`, `make geocode`, `make load`, `make docs`.
+- Monitor outputs under `out/`; run SQL in Snowflake; try agents examples.
 
 User experience goals
 - Simple, repeatable CLI with sensible defaults and prompts.

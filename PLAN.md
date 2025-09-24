@@ -37,4 +37,28 @@ Next steps after merge
 - Replace placeholders (GCS bucket, Snowflake org/account, demo video).
 - Connect real geocoding provider and enable non‑mocked paths.
 
+# Portfolio Retrofit Plan (PR Summary)
+
+## What changed
+- Replaced Makefile with two targets: `scrape10`, `transform10`.
+- Added stub-friendly CLI scraper (`scraper/cli/`) producing NDJSON/CSV with exactly 10 rows.
+- Added local-only transformer (`pipeline/local_transform.py`) emitting Parquet/CSV and a validation summary.
+- Built GitHub Pages static site in `/docs` (chat UI, dark theme, assets, wiring guide).
+- Scaffolded minimal backend stubs under `/backend` (Cloudflare Workers) with three endpoints and `.env.sample`.
+
+## How to run the demos
+- A) CLI SCRAPE (ten listings)
+  - `make scrape10`
+  - Outputs: `data/raw/listings_10.ndjson`, `data/raw/listings_10.csv`
+- B) LOCAL TRANSFORM (no Snowflake)
+  - `make transform10`
+  - Outputs: `data/processed/listings_10_transformed.parquet`, `data/processed/listings_10_transformed.csv`
+  - Prints a small JSON summary to stdout
+- C) MINI CHATBOT WEBSITE (GitHub Pages)
+  - Serve `/docs` (or enable GitHub Pages). Before payment, Ask is disabled. After mock payment (PLACEHOLDER flow), Ask enables and a single question can be sent (token consumed).
+
+## Notes
+- Frontend holds no secrets. Configure backend and Snowflake per `docs/wire-up-cortex.md`.
+- Offline stubs ensure both Make targets succeed without network or credentials.
+
 

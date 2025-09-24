@@ -1,23 +1,16 @@
 System Patterns
 
 Architecture overview
-- Modules
-  - `slicer.py`: Creates adaptive slice plans (REGION → OUTCODE → price bands) sized to fit under pagination caps.
-  - `discovery.py`: Iterates slice pages, reads result counts, collects canonical listing URLs.
-  - `scrape_listing.py`: Orchestrates listing fetch + parse using Playwright and extractors.
-  - `extractors.py`: DOM/HTML parsing and normalization of listing fields.
-  - `normalize.py`: Value cleaning (e.g., price parsing, text normalization).
-  - `browser.py`: Playwright context/page creation with timeouts and headless config.
-  - `config.py`/`compliance.py`: Env var loading, guardrails (consent gate, delays, concurrency).
-  - `datastore.py`: Batch writes and final merges to CSV/Arrow.
-  - `logging_setup.py`: Rich logging configuration.
-  - `cli.py`: Typer CLI entry mapping to plan/discover/scrape commands.
-  - `jobs/entrypoint.py`: Sharded execution for Cloud Run Job.
+- Modules (portfolio scope)
+  - `src/rightmove_scraper/*`: discovery + scrape CLI used by `make scrape10`.
+  - `pipeline/local_rightmove_transform.py`: local transform, builds LOCATION, computes ZONE, reverse‑geocodes ADDRESS.
+  - `docs/*`: static mini chatbot (dark UI), wiring guide, assets.
+  - `backend/*`: serverless‑first stubs (Cloudflare Worker) for payment + chat token + chat proxy.
 
-Control flow (plan → discover → scrape)
-1) Plan: write plan file under `out/<q>/<min>/<max>/<type>.txt`.
-2) Discover: write per‑slice CSVs to `out/per_slice/` and merged `out/discovered_adaptive_seeds.csv`.
-3) Scrape: read seeds, optionally resume from `rightmove_id`, batch‑save every N, final merge to `out/listings.csv`.
+Control flow (A/B/C)
+1) A: `make scrape10` → discover/search + scrape 10 listings → `data/raw/listings_10.{csv,ndjson}`.
+2) B: `make transform10` → local enrich (LOCATION, ZONE, ADDRESS) → `data/processed/listings_10_transformed.{csv,parquet}`.
+3) C: `/docs` mini chatbot → optional backend wiring (no secrets on frontend).
 
 Reliability & compliance
 - Navigation waits for `domcontentloaded`, then for property cards to render.
@@ -33,5 +26,6 @@ Data model themes (non‑exhaustive)
 - Amenities/flags: `council_tax`, `parking`, `garden`, `accessibility` (fields may be sparse).
 
 Operational patterns
-- Batch writes during scrape, final merge at end; resumable by ID threshold.
-- Shard input seeds to parallelize across Cloud Run Job tasks with guarded per‑task concurrency.
+- Conservative scraping defaults; `ALLOW_DISCOVERY=true` and `consent.txt` gate discovery.
+- Local transform only; no Snowflake required for A/B demos.
+- Secrets live only in backend; frontend uses `docs/config.json` placeholders.

@@ -1,4 +1,4 @@
-London Property Market Portfolio — Data Mining (Rightmove Scraper)
+London Property Market Portfolio — Data Mining → Transformation → AI Agents
 
 Purpose
 - Build a robust, polite Rightmove listing scraper for personal, non‑commercial research.
@@ -8,12 +8,13 @@ Scope (in this repo)
 - Adaptive slicer to plan non‑overlapping search slices.
 - URL discovery per slice, merging and de‑duping results.
 - Headless scraping of listing details with resilient extractors and normalization.
-- CLI and shell scripts to run the plan → discover → scrape workflow locally or in containers / Cloud Run Jobs.
-- Write structured outputs to `out/` (CSV, batch files).
+- SQL modeling: staging clean, CTE transforms, semantic view for analysis.
+- Cortex Analyst/Search examples over transformed data.
+- CLI + Makefile targets for repeatable runs; CI workflows and docs site.
+- Outputs to `out/` and loading path to Snowflake.
 
-Out of Scope (handled by other portfolio components)
-- Data warehousing and SQL modeling.
-- BI dashboarding and distribution.
+Out of Scope (handled elsewhere)
+- External BI dashboards.
 
 Success Criteria
 - Coverage: high proportion of London listings discovered (unique canonical URLs / `rightmove_id`).
@@ -27,7 +28,7 @@ Constraints
 - Cloud Run Job execution uses parallel shards with guarded concurrency per task.
 
 Primary Deliverables
-- Python package `rightmove-scraper` with Typer CLI.
-- Shell scripts: `scripts/adaptive_slicer.sh`, `scripts/discover_urls.sh`, `scripts/run_scrape.sh`.
-- Container/Docker setup for reproducible runs and Cloud Run Jobs.
-- Outputs: `out/per_slice/`, `out/discovered_adaptive_seeds.csv`, `out/listings.csv`.
+- Python package `rightmove-scraper` with Typer CLI and Makefile targets.
+- Scraper module + exporters; pipeline loaders and geocoding; SQL CTEs and view.
+- Agents examples for Snowflake Cortex.
+- CI (lint/test/build) and MkDocs site.

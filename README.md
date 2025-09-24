@@ -14,12 +14,16 @@
 
 **A polite Playwright scraper + Snowflake pipeline + AI agents to explore London property prices.**
 
-### Quickstart (3 commands)
+### Try the portfolio demos
 ```bash
-make setup
-make scrape
-make docs
+# A) CLI scrape 10 listings (writes data/raw/listings_10.{ndjson,csv})
+make scrape10
+
+# B) Local transform 10 (writes data/processed/listings_10_transformed.{parquet,csv})
+make transform10
 ```
+
+Open the mini chatbot at `docs/index.html` (served by GitHub Pages when enabled). See `docs/wire-up-cortex.md` to connect a real backend and Snowflake Cortex.
 
 ### Architecture
 ```mermaid
@@ -45,7 +49,7 @@ flowchart LR
 - `sql/`: schema, staging clean, transforms, views
 - `agents/`: Cortex Analyst/Search examples
 - `infra/`: Cloud Run, docker-compose, CI
-- `docs/`: MkDocs site
+- `docs/`: Static GitHub Pages demo (chat UI, wiring guide)
 
 ### Why it’s interesting
 - Adaptive slicing bypasses pagination caps safely

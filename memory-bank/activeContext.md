@@ -1,22 +1,23 @@
 Active Context
 
 Current focus
-- Initialize the Memory Bank and document project context for reliable continuity across sessions.
+- Portfolio-ready guided flows A/B/C with zero external creds; minimal repo footprint.
 
-Repo state (at initialization)
-- Branch behind `origin/main` by 2 commits.
-- Modified files: `src/rightmove_scraper/extractors.py`, `src/rightmove_scraper/models.py`, `src/rightmove_scraper/scrape_listing.py`.
-- Untracked: `tests/` directory present.
+Repo state
+- New repo created and pushed: `rightmove-london-portfolio` (remote `portfolio`).
+- CI workflows added, docs site configured, Makefile targets available.
 
 Recent changes
-- Memory Bank created with core files and initial content derived from README, `pyproject.toml`, and Dockerfile.
+- Makefile trimmed to two targets: `scrape10` (uses `rightmove_scraper.cli`) and `transform10` (local, no Snowflake).
+- Added `pipeline/local_rightmove_transform.py`: builds LOCATION, computes ZONE, reverse-geocodes ADDRESS via geopy.
+- Built `/docs` static mini chatbot (dark UI) and wiring guide; backend stubs under `/backend` (Cloudflare Worker).
+- Removed dummy `scraper/` CLI/stubs; added .gitignore to exclude secrets, outputs, and unneeded code.
 
 Next steps
-- Keep Memory Bank up‑to‑date after significant code or process changes.
-- Stabilize extractors and models as needed; expand tests under `tests/`.
-- Maintain compliance defaults (low concurrency, delays, consent gate).
+- Optional: enable GitHub Pages for `/docs`; add social preview link in README.
+- Record demo video snippet of the three flows.
 
 Active decisions
-- Default outputs under `out/`; final merged scraped data at `out/listings.csv`.
-- CLI entrypoint `rightmove-scraper` (Typer) with supporting shell scripts for common flows.
-- Cloud Run Job pattern supported via `jobs/entrypoint.py` and shards directory.
+- Outputs live under `data/raw` and `data/processed`; these are gitignored.
+- Use `rightmove_scraper.cli` directly for scraping 10 listings; geopy used for ADDRESS locally.
+- Secrets and Snowflake-only scripts are untracked and ignored in this portfolio repo.

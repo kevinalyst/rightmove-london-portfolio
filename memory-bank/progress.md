@@ -1,20 +1,18 @@
 Progress
 
 What works
-- Adaptive slicer planning, per README.
-- URL discovery with per‑slice outputs and merged de‑duped seeds.
-- Scraper with batch saves and final merged CSV example given in README.
-- Docker/Cloud Run Job pattern with shard inputs and guarded concurrency.
+- `make scrape10` → scrapes 10 listings with `rightmove_scraper.cli`, saves to `data/raw/listings_10.{csv,ndjson}`.
+- `make transform10` → local transform builds `LOCATION`, `ZONE`, reverse-geocodes `ADDRESS`, writes `data/processed/...` and prints summary.
+- `/docs` GitHub Pages mini chatbot renders and explains wiring; backend stubs present.
 
 What’s left / enhancements
-- Expand automated tests under `tests/` (HTML fixtures, extractor assertions).
-- Harden extractors for edge cases; improve normalization consistency.
-- Optional: integrate GCS uploads and CI hooks.
+- Replace mock geocoder with provider; add caching.
+- Optional: enable real GCS upload in pipelines and document credentials.
+- Demo video recording and link replacement.
 
 Current status
-- Memory Bank initialized and populated with project context.
-- Local branch behind `origin/main` by 2 commits; modified extractor/model/scraper files present.
+- Portfolio flows implemented; repo slimmed down; secrets and heavy paths ignored.
 
 Known issues / risks
-- Rightmove anti‑bot mitigations require conservative defaults (low concurrency, delays, real UA).
-- Dynamic site changes can break selectors; keep extractor logic modular and well‑tested.
+- Rightmove anti‑bot mitigations; use conservative defaults and `consent.txt`.
+- Nominatim geocoding is rate limited (~1 req/sec); batch sizes should remain small.

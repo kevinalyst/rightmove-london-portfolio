@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>London Property Portfolio · Demo Chat</title>
+    <link rel="icon" href="assets/favicon.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img src="assets/logo.svg" alt="Logo" class="logo" />
+        <h1>London Property Portfolio</h1>
+      </div>
+      <nav>
+        <a href="https://github.com/" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </nav>
+    </header>
+
+    <main class="grid">
+      <section class="intro">
+        <h2>Try the guided flows</h2>
+        <ol>
+          <li>A) CLI scrape 10: <code>make scrape10</code></li>
+          <li>B) Local transform 10: <code>make transform10</code></li>
+          <li>C) Chatbot (this page)</li>
+        </ol>
+        <p class="note">No secrets on the frontend. Payment uses a $1 placeholder; tokens are one‑time use.</p>
+        <img src="assets/demo.gif" alt="demo" class="demo" />
+      </section>
+
+      <section class="chat">
+        <div class="chat-panel">
+          <div class="messages" id="messages" aria-live="polite"></div>
+          <div class="composer">
+            <textarea id="input" rows="3" placeholder="Ask about the data…" disabled></textarea>
+            <div class="actions">
+              <button id="pay">Pay $1 &amp; Ask</button>
+              <button id="ask" disabled>Ask</button>
+              <button id="reset" class="secondary">Reset</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <nav>
+        <a href="privacy.html">Privacy</a>
+        <a href="terms.html">Terms</a>
+      </nav>
+      <small>© 2025 Kevin Lee</small>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+  </html>
+
+
