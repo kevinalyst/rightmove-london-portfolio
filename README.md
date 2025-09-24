@@ -33,7 +33,7 @@ flowchart LR
   T --> P[data/processed/listings_10_transformed.csv]
   T --> Q[data/processed/listings_10_transformed.parquet]
 
-  UI[/docs (GitHub Pages)/] -->|Ask| API[Backend stubs]
+  UI["/docs (GitHub Pages)/"] -->|Ask| API[Backend stubs]
   API -->|Cortex call (optional)| SF[(Snowflake)]
 ```
 
