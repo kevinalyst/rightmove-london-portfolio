@@ -12,3 +12,9 @@ id = "d1346f9d43a14cf8b356b75e509e1765"
 [vars]
 ALLOW_ORIGIN = "https://rightmove-london-portfolio.pages.dev,*.rightmove-london-portfolio.pages.dev,https://london-property-analysis.uk,*.london-property-analysis.uk"
 ALLOW_DEMO_FREE = "true"
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
