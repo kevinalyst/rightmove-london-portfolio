@@ -13,7 +13,7 @@ Recent changes
 - Added `pipeline/local_rightmove_transform.py`: builds LOCATION, computes ZONE, reverse-geocodes ADDRESS via geopy.
 - Built `/docs` static mini chatbot (dark UI) and wiring guide; backend stubs under `/backend` (Cloudflare Worker).
 - Removed dummy `scraper/` CLI/stubs; added .gitignore to exclude secrets, outputs, and unneeded code.
-- Deployed Cloudflare Worker: `london-portfolio-backend` with KV `USAGE_TOKENS`, CORS wildcard support for Pages preview subdomains.
+- Deployed Cloudflare Worker: `london-portfolio-backend` with KV `USAGE_TOKENS`, CORS wildcard support for Pages preview subdomains and production `london-property-analysis.uk` domain.
 - Pages project serves `/docs` and points frontend to Worker `backend_base_url`.
 - Worker now supports `ALLOW_DEMO_FREE` mode (5 free queries) and accepts `{question|query}` payloads; inline backend URL injected in `index.html` to avoid missing `config.json`.
 
