@@ -20,28 +20,65 @@
 
     <main class="grid">
       <section class="intro">
-        <h2>Try the guided flows</h2>
-        <ol>
-          <li>A) CLI scrape 10: <code>make scrape10</code></li>
-          <li>B) Local transform 10: <code>make transform10</code></li>
-          <li>C) Chatbot (this page)</li>
+        <h2>Explore the data with Snowflake Cortex</h2>
+        <p>
+          Ask questions about transformed Rightmove listings using two modes: <strong>Analyst</strong> for structured SQL-style analysis over
+          <code>RIGHTMOVE_TRANSFORMED</code>, and <strong>Search</strong> for unstructured mining across listing descriptions and docs. Visual answers may
+          include tables and charts.
+        </p>
+        <h3>How this works</h3>
+        <ol class="howto">
+          <li>Pick a suggested question or type your own.</li>
+          <li>The backend calls Snowflake Cortex (Analyst or Search) and returns results.</li>
+          <li>We render a concise answer and any visualizations below.</li>
         </ol>
-        <p class="note">No secrets on the frontend. Payment uses a $1 placeholder; tokens are one‑time use.</p>
         <img src="assets/demo.gif" alt="demo" class="demo" />
       </section>
 
       <section class="chat">
-        <div class="chat-panel">
+        <div class="prepop">
+          <h3 class="sr-only">Suggested questions</h3>
+          <div class="pills-grid" id="prepop-grid">
+            <!-- Structured (Analyst) -->
+            <button class="pill" data-mode="analyst" data-viz="bar" data-qid="a1">Average price by borough</button>
+            <button class="pill" data-mode="analyst" data-viz="histogram" data-qid="a2">Price distribution (50k bins)</button>
+            <button class="pill" data-mode="analyst" data-viz="pie" data-qid="a3">Share by property type</button>
+            <button class="pill" data-mode="analyst" data-viz="table" data-qid="a4">Top 10 most expensive listings</button>
+            <button class="pill" data-mode="analyst" data-viz="line" data-qid="a5">Monthly avg price trend (12m)</button>
+            <!-- Unstructured (Search) -->
+            <button class="pill" data-mode="search" data-viz="table" data-qid="s1">Listings mentioning "garden" or "balcony"</button>
+            <button class="pill" data-mode="search" data-viz="bar" data-qid="s2">Top amenities keywords in descriptions</button>
+            <button class="pill" data-mode="search" data-viz="histogram" data-qid="s3">Histogram of description lengths</button>
+            <button class="pill" data-mode="search" data-viz="bar" data-qid="s4">Agents that mention "chain free" most</button>
+            <button class="pill" data-mode="search" data-viz="table" data-qid="s5">Summarize sentiment by borough</button>
+          </div>
+        </div>
+
+        <div class="chat-panel" aria-label="Chat">
           <div class="messages" id="messages" aria-live="polite"></div>
+
+          <div class="toolbar">
+            <fieldset class="mode-toggle" aria-label="Mode">
+              <legend class="sr-only">Mode</legend>
+              <label><input type="radio" name="mode" value="analyst" checked /> Analyst</label>
+              <label><input type="radio" name="mode" value="search" /> Search</label>
+            </fieldset>
+            <div class="uses">
+              <span class="badge" id="uses-badge" title="">Free uses left: <span id="uses-count">5</span></span>
+              <small class="muted">Five free queries per browser</small>
+              <button id="reset-quota" class="linklike" hidden>Reset quota</button>
+            </div>
+          </div>
+
           <div class="composer">
-            <textarea id="input" rows="3" placeholder="Ask about the data…" disabled></textarea>
+            <textarea id="input" rows="3" placeholder="Ask about prices, types, trends… (Enter to send, Shift+Enter for newline)"></textarea>
             <div class="actions">
-              <button id="pay">Pay $1 &amp; Ask</button>
-              <button id="ask" disabled>Ask</button>
+              <button id="ask">Ask</button>
               <button id="reset" class="secondary">Reset</button>
             </div>
           </div>
         </div>
+        <div class="sr-only" id="a11y-announcer" aria-live="polite"></div>
       </section>
     </main>
 
@@ -53,6 +90,7 @@
       <small>© 2025 Kevin Lee</small>
     </footer>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="app.js"></script>
   </body>
   </html>

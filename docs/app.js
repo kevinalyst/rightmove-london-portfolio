@@ -1,106 +1,301 @@
-const State = { idle: 'idle', paid: 'paid', querying: 'querying', error: 'error' };
+const State = { idle: 'idle', querying: 'querying', error: 'error' };
 let state = State.idle;
-let config = null;
+let config = { backend_base_url: '' };
+
+const STORAGE_KEY = 'demoFreeUses';
+const INITIAL_USES = 5;
 
 const els = {
   messages: document.getElementById('messages'),
   input: document.getElementById('input'),
-  pay: document.getElementById('pay'),
   ask: document.getElementById('ask'),
   reset: document.getElementById('reset'),
+  usesBadge: document.getElementById('uses-badge'),
+  usesCount: document.getElementById('uses-count'),
+  modeRadios: document.querySelectorAll('input[name="mode"]'),
+  prepopGrid: document.getElementById('prepop-grid'),
+  announcer: document.getElementById('a11y-announcer'),
+  resetQuota: document.getElementById('reset-quota'),
 };
 
 async function loadConfig(){
-  const res = await fetch('config.json', { cache: 'no-store' });
-  config = await res.json();
+  try{
+    const res = await fetch('config.json', { cache: 'no-store' });
+    if (res.ok){
+      const json = await res.json();
+      if (json && typeof json.backend_base_url === 'string'){
+        config.backend_base_url = json.backend_base_url;
+      }
+    }
+  } catch{}
+}
+
+function getRemainingUses(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  const n = raw == null ? NaN : Number(raw);
+  if (!Number.isFinite(n) || n < 0){
+    localStorage.setItem(STORAGE_KEY, String(INITIAL_USES));
+    return INITIAL_USES;
+  }
+  return n;
+}
+
+function setRemainingUses(n){
+  const v = Math.max(0, Math.floor(Number(n)) || 0);
+  localStorage.setItem(STORAGE_KEY, String(v));
+}
+
+function updateUsesUI(){
+  const remaining = getRemainingUses();
+  els.usesCount.textContent = String(remaining);
+  const out = remaining <= 0;
+  els.ask.disabled = out || state === State.querying;
+  els.ask.title = out ? 'Out of free uses' : '';
+}
+
+function announceUses(){
+  els.announcer.textContent = `Free uses remaining: ${getRemainingUses()}`;
 }
 
 function setState(next){
   state = next;
-  const token = localStorage.getItem('usage_token');
-  if (state === State.paid || token){
-    els.input.removeAttribute('disabled');
-    els.ask.removeAttribute('disabled');
+  if (state === State.querying){
+    els.ask.disabled = true;
+    els.input.setAttribute('aria-busy','true');
   } else {
-    els.input.setAttribute('disabled','');
-    els.ask.setAttribute('disabled','');
+    els.input.removeAttribute('aria-busy');
+    updateUsesUI();
   }
 }
 
 function addMessage(role, text){
   const div = document.createElement('div');
   div.className = `message ${role}`;
-  div.textContent = text;
+  const badge = document.createElement('span');
+  badge.className = 'role-badge';
+  badge.textContent = role === 'user' ? 'You' : 'Assistant';
+  const body = document.createElement('div');
+  body.className = 'message-text';
+  body.textContent = text;
+  div.appendChild(badge);
+  div.appendChild(body);
   els.messages.appendChild(div);
   els.messages.scrollTop = els.messages.scrollHeight;
+  return div;
 }
 
-async function createCheckout(){
-  try{
-    const res = await fetch(`${config.backend_base_url}/api/create-checkout-session`, { method:'POST' });
-    const data = await res.json();
-    if (data && data.url){
-      // For demo: simulate immediate success when placeholder key is present
-      if (config.stripe_public_key.includes('PLACEHOLDER')){
-        const fakeSession = 'demo_session_' + Math.random().toString(36).slice(2);
-        await grant(fakeSession);
-        return;
-      }
-      window.location.href = data.url;
-    } else {
-      throw new Error('Bad response');
+function joinUrl(base, path){
+  if (!base) return path;
+  return `${base.replace(/\/$/, '')}${path.startsWith('/') ? '' : '/'}${path}`;
+}
+
+function toCSVFromRows(rows){
+  if (!Array.isArray(rows) || rows.length === 0) return '';
+  const headers = Array.from(rows.reduce((set, r) => {
+    Object.keys(r || {}).forEach(k => set.add(k));
+    return set;
+  }, new Set()));
+  const esc = (v) => {
+    if (v == null) return '';
+    const s = String(v);
+    if (s.includes('"') || s.includes(',') || s.includes('\n')){
+      return '"' + s.replaceAll('"','""') + '"';
     }
-  } catch(err){
-    console.error(err);
-    addMessage('assistant','Payment service is unavailable right now.');
-    setState(State.error);
+    return s;
+  };
+  const lines = [headers.join(',')];
+  for (const row of rows){
+    lines.push(headers.map(h => esc(row[h])).join(','));
   }
+  return lines.join('\n');
 }
 
-async function grant(sessionId){
-  try{
-    const res = await fetch(`${config.backend_base_url}/api/grant?session_id=${encodeURIComponent(sessionId)}`);
-    const data = await res.json();
-    if (data && data.token){
-      localStorage.setItem('usage_token', data.token);
-      setState(State.paid);
-      addMessage('assistant','Payment confirmed. You can ask one question.');
-    } else {
-      throw new Error('No token');
-    }
-  } catch(err){
-    console.error(err);
-    addMessage('assistant','Unable to grant token.');
-    setState(State.error);
-  }
-}
-
-async function sendChat(){
-  const text = els.input.value.trim();
-  if (!text) return;
-  const token = localStorage.getItem('usage_token');
-  if (!token){
-    addMessage('assistant','Please complete payment first.');
+function renderTable(parent, rows){
+  if (!Array.isArray(rows) || rows.length === 0){
+    const small = document.createElement('small');
+    small.className = 'muted';
+    small.textContent = 'No rows.';
+    parent.appendChild(small);
     return;
   }
+  const headers = Array.from(rows.reduce((set, r) => { Object.keys(r || {}).forEach(k => set.add(k)); return set; }, new Set()));
+  const wrap = document.createElement('div');
+  wrap.className = 'table-wrap';
+  const table = document.createElement('table');
+  const thead = document.createElement('thead');
+  const trh = document.createElement('tr');
+  for (const h of headers){
+    const th = document.createElement('th');
+    th.textContent = h;
+    trh.appendChild(th);
+  }
+  thead.appendChild(trh);
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  for (const r of rows){
+    const tr = document.createElement('tr');
+    for (const h of headers){
+      const td = document.createElement('td');
+      const val = r[h];
+      td.textContent = val == null ? '' : String(val);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  parent.appendChild(wrap);
+}
+
+function buildChartDatasetFromSpec(data, spec){
+  const xKey = spec.x;
+  const yKey = spec.y;
+  const labels = [];
+  const values = [];
+  for (const row of (data || [])){
+    labels.push(row?.[xKey]);
+    values.push(Number(row?.[yKey] ?? 0));
+  }
+  return { labels, datasets: [{ label: yKey || 'value', data: values }] };
+}
+
+function computeHistogram(data, spec){
+  const xKey = spec.x;
+  const nums = (data || []).map(r => Number(r?.[xKey])).filter(n => Number.isFinite(n));
+  if (nums.length === 0){
+    return { labels: [], datasets: [{ label: 'count', data: [] }] };
+  }
+  const bins = Math.max(1, Number(spec.bins) || 10);
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  const width = (max - min) / bins || 1;
+  const edges = Array.from({length: bins}, (_, i) => min + i * width);
+  const counts = new Array(bins).fill(0);
+  for (const v of nums){
+    let idx = Math.floor((v - min) / width);
+    if (idx >= bins) idx = bins - 1;
+    if (idx < 0) idx = 0;
+    counts[idx]++;
+  }
+  const labels = edges.map((e, i) => `${Math.round(e).toLocaleString()}–${Math.round(e + width).toLocaleString()}`);
+  return { labels, datasets: [{ label: 'count', data: counts }] };
+}
+
+function renderChart(parent, data, viz){
+  const canvas = document.createElement('canvas');
+  parent.appendChild(canvas);
+  let cfgData;
+  if (viz.type === 'histogram'){
+    cfgData = computeHistogram(data, viz);
+  } else {
+    cfgData = buildChartDatasetFromSpec(data, viz);
+  }
+  const type = viz.type === 'histogram' ? 'bar' : viz.type;
+  // eslint-disable-next-line no-undef
+  new Chart(canvas.getContext('2d'), {
+    type,
+    data: cfgData,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#e6edf3' } },
+        tooltip: { intersect: false, mode: 'index' },
+      },
+      scales: {
+        x: { ticks: { color: '#9da7b3' }, grid: { color: '#1f2328' } },
+        y: { ticks: { color: '#9da7b3' }, grid: { color: '#1f2328' } }
+      }
+    }
+  });
+}
+
+function attachCopyCSV(btn, source){
+  btn.addEventListener('click', async () => {
+    try{
+      await navigator.clipboard.writeText(source());
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = 'Copy CSV'; }, 1200);
+    } catch{}
+  });
+}
+
+function renderVizBelow(messageEl, data, viz){
+  if (!viz || !data) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'viz';
+  const header = document.createElement('div');
+  header.className = 'viz-header';
+  const title = document.createElement('strong');
+  title.textContent = viz.type === 'table' ? 'Table' : viz.type.toUpperCase();
+  const copy = document.createElement('button');
+  copy.className = 'copy-btn';
+  copy.type = 'button';
+  copy.textContent = 'Copy CSV';
+  header.appendChild(title);
+  header.appendChild(copy);
+  wrap.appendChild(header);
+
+  if (viz.type === 'table'){
+    renderTable(wrap, data);
+    attachCopyCSV(copy, () => toCSVFromRows(data));
+  } else if (['bar','line','pie','histogram'].includes(viz.type)){
+    const csv = () => {
+      if (viz.type === 'histogram'){
+        const agg = computeHistogram(data, viz);
+        const rows = agg.labels.map((label, i) => ({ bin: label, count: agg.datasets[0].data[i] || 0 }));
+        return toCSVFromRows(rows);
+      }
+      const agg = buildChartDatasetFromSpec(data, viz);
+      const rows = agg.labels.map((label, i) => ({ [viz.x || 'x']: label, [viz.y || 'y']: agg.datasets[0].data[i] || 0 }));
+      return toCSVFromRows(rows);
+    };
+    renderChart(wrap, data, viz);
+    wrap.style.height = '280px';
+    attachCopyCSV(copy, csv);
+  }
+
+  messageEl.appendChild(wrap);
+}
+
+function currentMode(){
+  for (const r of els.modeRadios){ if (r.checked) return r.value; }
+  return 'analyst';
+}
+
+async function sendChat({ overrideMode = null, overrideViz = null } = {}){
+  const text = els.input.value.trim();
+  if (!text) return;
+  if (getRemainingUses() <= 0){
+    updateUsesUI();
+    return;
+  }
+  const mode = overrideMode || currentMode();
+  const viz = overrideViz; // may be null
+
   addMessage('user', text);
   els.input.value='';
   setState(State.querying);
+
+  const payload = { mode, question: text, viz: viz || null, table: 'RIGHTMOVE_TRANSFORMED' };
+  const url = joinUrl(config.backend_base_url, '/api/chat');
+
   try{
-    const res = await fetch(`${config.backend_base_url}/api/chat`,{
+    const res = await fetch(url, {
       method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` },
-      body: JSON.stringify({query:text})
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify(payload)
     });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    if (data && data.text){
-      addMessage('assistant', data.text);
-      // Consume token on first use
-      localStorage.removeItem('usage_token');
-      setState(State.idle);
-    } else {
-      throw new Error('No text');
-    }
+    if (!data) throw new Error('Empty');
+    const msg = addMessage('assistant', data.answer || '');
+    if (data.viz && data.data) renderVizBelow(msg, data.data, data.viz);
+    // success → decrement free uses
+    setRemainingUses(getRemainingUses() - 1);
+    updateUsesUI();
+    announceUses();
+    setState(State.idle);
   } catch(err){
     console.error(err);
     addMessage('assistant','Service error. Please try again later.');
@@ -108,32 +303,50 @@ async function sendChat(){
   }
 }
 
-function resetAll(){
-  localStorage.removeItem('usage_token');
+function resetTranscript(){
   els.messages.innerHTML='';
   setState(State.idle);
 }
 
+function handlePrepopClick(e){
+  const btn = e.target.closest('.pill');
+  if (!btn) return;
+  const question = btn.textContent.trim();
+  const mode = btn.getAttribute('data-mode');
+  const viz = btn.getAttribute('data-viz');
+  els.input.value = question;
+  // Auto-send
+  sendChat({ overrideMode: mode, overrideViz: viz });
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
   await loadConfig();
-  setState(State.idle);
-  // If redirected from real payment: ?session_id=...
+
+  // seed free uses if needed
+  setRemainingUses(getRemainingUses());
+  updateUsesUI();
+  announceUses();
+
+  // debug hook to reset quota
   const url = new URL(window.location.href);
-  const sid = url.searchParams.get('session_id');
-  if (sid){
-    await grant(sid);
-    url.searchParams.delete('session_id');
-    history.replaceState({},'',url.toString());
+  if (url.searchParams.get('debug') === '1'){
+    els.resetQuota.hidden = false;
+    els.resetQuota.addEventListener('click', () => {
+      setRemainingUses(INITIAL_USES);
+      updateUsesUI();
+      announceUses();
+    });
   }
-  els.pay.addEventListener('click', createCheckout);
-  els.ask.addEventListener('click', sendChat);
+
+  els.ask.addEventListener('click', () => sendChat());
   els.input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)){
+    if (e.key === 'Enter' && !e.shiftKey){
       e.preventDefault();
       sendChat();
     }
   });
-  els.reset.addEventListener('click', resetAll);
+  els.reset.addEventListener('click', resetTranscript);
+  els.prepopGrid.addEventListener('click', handlePrepopClick);
 });
 
 
