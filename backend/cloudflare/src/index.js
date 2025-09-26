@@ -18,16 +18,43 @@ async function signJwt(payload, secret){
   return `${data}.${sigB64}`;
 }
 
+function parseAllowedOrigins(raw){
+  if (!raw || raw === '*') return ['*'];
+  return String(raw)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function matchesOrigin(origin, patterns){
+  if (!origin) return '';
+  if (!patterns || patterns.length === 0) return '';
+  if (patterns.includes('*')) return '*';
+  for (const pattern of patterns){
+    if (pattern === origin) return origin;
+    if (pattern.startsWith('*.')){
+      const suffix = pattern.slice(1); // keep leading dot
+      if (origin.endsWith(suffix)) return origin;
+    }
+  }
+  return '';
+}
+
 function corsHeaders(env, request){
   const origin = request.headers.get('Origin');
-  const allowed = env.ALLOW_ORIGIN || '*';
-  const allow = allowed === '*' ? '*' : (origin === allowed ? origin : '');
+  const patterns = parseAllowedOrigins(env.ALLOW_ORIGIN || '*');
+  const allow = matchesOrigin(origin, patterns);
   const base = {
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Vary': 'Origin'
   };
-  if (allow) base['Access-Control-Allow-Origin'] = allow;
+  if (allow) {
+    base['Access-Control-Allow-Origin'] = allow;
+    if (allow !== '*') {
+      base['Access-Control-Allow-Credentials'] = 'true';
+    }
+  }
   return base;
 }
 
