@@ -2,6 +2,7 @@ Active Context
 
 Current focus
 - Portfolio-ready guided flows A/B/C with zero external creds; minimal repo footprint.
+- Keep Pages chatbot reliably wired to Worker after demo-only backend change.
 
 Repo state
 - New repo created and pushed: `rightmove-london-portfolio` (remote `portfolio`).
@@ -14,13 +15,15 @@ Recent changes
 - Removed dummy `scraper/` CLI/stubs; added .gitignore to exclude secrets, outputs, and unneeded code.
 - Deployed Cloudflare Worker: `london-portfolio-backend` with KV `USAGE_TOKENS`, CORS `ALLOW_ORIGIN=https://rightmove-london-portfolio.pages.dev`.
 - Pages project serves `/docs` and points frontend to Worker `backend_base_url`.
+- Worker now supports `ALLOW_DEMO_FREE` mode (5 free queries) and accepts `{question|query}` payloads; inline backend URL injected in `index.html` to avoid missing `config.json`.
 
 Next steps
 - Optional: enable GitHub Pages for `/docs`; add social preview link in README.
 - Record demo video snippet of the three flows.
+- Consider restoring paid Stripe flow later or document free demo limitations.
 
 Active decisions
 - Outputs live under `data/raw` and `data/processed`; these are gitignored.
 - Use `rightmove_scraper.cli` directly for scraping 10 listings; geopy used for ADDRESS locally.
 - Secrets and Snowflake-only scripts are untracked and ignored in this portfolio repo.
-- Stripe product: “London Property Chat — 10‑Query Pack”; token grants 10 credits, TTL 15m; KV-enforced one‑time use per credit.
+- Stripe flow temporarily disabled on frontend; rely on 5 free local uses while backend keeps token logic behind `ALLOW_DEMO_FREE` flag.
