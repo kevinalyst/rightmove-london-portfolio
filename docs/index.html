@@ -14,66 +14,36 @@
         <h1>London Property Portfolio</h1>
       </div>
       <nav>
-        <a href="https://github.com/" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a class="btn-ghost" href="https://youtu.be/PLACEHOLDER" target="_blank" rel="noopener noreferrer" aria-label="Watch demo on YouTube">
+          <svg class="yt" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.5 6.2c-.3-1.2-1.2-2.1-2.4-2.4C19 3.3 12 3.3 12 3.3s-7 0-9.1.5C1.7 4.1.8 5 .5 6.2.1 8.3.1 12 .1 12s0 3.7.4 5.8c.3 1.2 1.2 2.1 2.4 2.4 2.1.5 9.1.5 9.1.5s7 0 9.1-.5c1.2-.3 2.1-1.2 2.4-2.4.4-2.1.4-5.8.4-5.8s0-3.7-.4-5.8zM9.7 15.6V8.4L15.9 12l-6.2 3.6z"/></svg>
+          <span>Watch Demo</span>
+        </a>
       </nav>
     </header>
 
-    <main class="grid">
-      <section class="intro">
-        <h2>Explore the data with Snowflake Cortex</h2>
-        <p>
-          Ask questions about transformed Rightmove listings using two modes: <strong>Analyst</strong> for structured SQL-style analysis over
-          <code>RIGHTMOVE_TRANSFORMED</code>, and <strong>Search</strong> for unstructured mining across listing descriptions and docs. Visual answers may
-          include tables and charts.
-        </p>
-        <h3>How this works</h3>
-        <ol class="howto">
-          <li>Pick a suggested question or type your own.</li>
-          <li>The backend calls Snowflake Cortex (Analyst or Search) and returns results.</li>
-          <li>We render a concise answer and any visualizations below.</li>
-        </ol>
-        <img src="assets/demo.gif" alt="demo" class="demo" />
-      </section>
-
-      <section class="chat">
-        <div class="prepop">
-          <h3 class="sr-only">Suggested questions</h3>
-          <div class="pills-grid" id="prepop-grid">
-            <!-- Structured (Analyst) -->
-            <button class="pill" data-mode="analyst" data-viz="bar" data-qid="a1">Average price by borough</button>
-            <button class="pill" data-mode="analyst" data-viz="histogram" data-qid="a2">Price distribution (50k bins)</button>
-            <button class="pill" data-mode="analyst" data-viz="pie" data-qid="a3">Share by property type</button>
-            <button class="pill" data-mode="analyst" data-viz="table" data-qid="a4">Top 10 most expensive listings</button>
-            <button class="pill" data-mode="analyst" data-viz="line" data-qid="a5">Monthly avg price trend (12m)</button>
-            <!-- Unstructured (Search) -->
-            <button class="pill" data-mode="search" data-viz="table" data-qid="s1">Listings mentioning "garden" or "balcony"</button>
-            <button class="pill" data-mode="search" data-viz="bar" data-qid="s2">Top amenities keywords in descriptions</button>
-            <button class="pill" data-mode="search" data-viz="histogram" data-qid="s3">Histogram of description lengths</button>
-            <button class="pill" data-mode="search" data-viz="bar" data-qid="s4">Agents that mention "chain free" most</button>
-            <button class="pill" data-mode="search" data-viz="table" data-qid="s5">Summarize sentiment by borough</button>
+    <main class="center">
+      <section class="card" aria-label="London Property Analysis">
+        <div class="card-head">
+          <div class="glyph" aria-hidden="true">◆</div>
+          <h1>London Property Analysis</h1>
+          <p class="byline">by <a href="https://github.com/Kevin-lee-187/rightmove-london-portfolio" target="_blank" rel="noopener noreferrer">Kevin Li</a></p>
+          <div class="kicker">Explore the data with Snowflake Cortex</div>
+          <p class="lede">Ask questions about transformed Rightmove listings using two modes: Analyst for structured SQL-style analysis over 28k+ estates on Rightmove, and Search for unstructured mining across listing descriptions and docs.</p>
+          <div class="pills-row" id="pills-row">
+            <button class="pill" data-mode="analyst" data-viz="bar"><span class="pill-ic" aria-hidden="true">A</span><span class="pill-label">Average price by borough</span></button>
+            <button class="pill" data-mode="analyst" data-viz="line"><span class="pill-ic" aria-hidden="true">A</span><span class="pill-label">Monthly avg price trend (12m)</span></button>
+            <button class="pill" data-mode="search" data-viz="table"><span class="pill-ic" aria-hidden="true">S</span><span class="pill-label">Listings mentioning “garden” or “balcony”</span></button>
+            <button class="pill" data-mode="search" data-viz="bar"><span class="pill-ic" aria-hidden="true">S</span><span class="pill-label">Top amenities keywords in descriptions</span></button>
           </div>
         </div>
 
-        <div class="chat-panel" aria-label="Chat">
+        <div class="chat-panel">
           <div class="messages" id="messages" aria-live="polite"></div>
-
-          <div class="toolbar">
-            <fieldset class="mode-toggle" aria-label="Mode">
-              <legend class="sr-only">Mode</legend>
-              <label><input type="radio" name="mode" value="analyst" checked /> Analyst</label>
-              <label><input type="radio" name="mode" value="search" /> Search</label>
-            </fieldset>
-            <div class="uses">
-              <span class="badge" id="uses-badge" title="">Free uses left: <span id="uses-count">5</span></span>
-              <small class="muted">Five free queries per browser</small>
-              <button id="reset-quota" class="linklike" hidden>Reset quota</button>
-            </div>
-          </div>
-
           <div class="composer">
-            <textarea id="input" rows="3" placeholder="Ask about prices, types, trends… (Enter to send, Shift+Enter for newline)"></textarea>
+            <textarea id="input" rows="3" placeholder="Ask anything about prices, types, or trends… (Enter to send, Shift+Enter for newline)"></textarea>
             <div class="actions">
               <button id="ask">Ask</button>
+              <span class="uses" id="uses-badge" title=""><span id="uses-count">5</span>/5</span>
               <button id="reset" class="secondary">Reset</button>
             </div>
           </div>
@@ -87,7 +57,7 @@
         <a href="privacy.html">Privacy</a>
         <a href="terms.html">Terms</a>
       </nav>
-      <small>© 2025 Kevin Lee</small>
+      <small>© 2025 Kevin Li</small>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

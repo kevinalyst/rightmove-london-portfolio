@@ -12,10 +12,8 @@ const els = {
   reset: document.getElementById('reset'),
   usesBadge: document.getElementById('uses-badge'),
   usesCount: document.getElementById('uses-count'),
-  modeRadios: document.querySelectorAll('input[name="mode"]'),
-  prepopGrid: document.getElementById('prepop-grid'),
+  pillsRow: document.getElementById('pills-row'),
   announcer: document.getElementById('a11y-announcer'),
-  resetQuota: document.getElementById('reset-quota'),
 };
 
 async function loadConfig(){
@@ -50,7 +48,7 @@ function updateUsesUI(){
   els.usesCount.textContent = String(remaining);
   const out = remaining <= 0;
   els.ask.disabled = out || state === State.querying;
-  els.ask.title = out ? 'Out of free uses' : '';
+  els.ask.title = out ? 'Out of free uses for this browser.' : '';
 }
 
 function announceUses(){
@@ -258,10 +256,8 @@ function renderVizBelow(messageEl, data, viz){
   messageEl.appendChild(wrap);
 }
 
-function currentMode(){
-  for (const r of els.modeRadios){ if (r.checked) return r.value; }
-  return 'analyst';
-}
+// Default mode for manual questions when no pill is used
+function currentMode(){ return 'analyst'; }
 
 async function sendChat({ overrideMode = null, overrideViz = null } = {}){
   const text = els.input.value.trim();
@@ -298,7 +294,7 @@ async function sendChat({ overrideMode = null, overrideViz = null } = {}){
     setState(State.idle);
   } catch(err){
     console.error(err);
-    addMessage('assistant','Service error. Please try again later.');
+    addMessage('assistant','Service error. Try again.');
     setState(State.error);
   }
 }
@@ -315,6 +311,9 @@ function handlePrepopClick(e){
   const mode = btn.getAttribute('data-mode');
   const viz = btn.getAttribute('data-viz');
   els.input.value = question;
+  // brief active style
+  btn.classList.add('active');
+  setTimeout(() => btn.classList.remove('active'), 900);
   // Auto-send
   sendChat({ overrideMode: mode, overrideViz: viz });
 }
@@ -327,15 +326,12 @@ window.addEventListener('DOMContentLoaded', async () => {
   updateUsesUI();
   announceUses();
 
-  // debug hook to reset quota
+  // developer-only: reseed quota via ?debug=1
   const url = new URL(window.location.href);
   if (url.searchParams.get('debug') === '1'){
-    els.resetQuota.hidden = false;
-    els.resetQuota.addEventListener('click', () => {
-      setRemainingUses(INITIAL_USES);
-      updateUsesUI();
-      announceUses();
-    });
+    setRemainingUses(INITIAL_USES);
+    updateUsesUI();
+    announceUses();
   }
 
   els.ask.addEventListener('click', () => sendChat());
@@ -346,7 +342,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
   els.reset.addEventListener('click', resetTranscript);
-  els.prepopGrid.addEventListener('click', handlePrepopClick);
+  if (els.pillsRow) els.pillsRow.addEventListener('click', handlePrepopClick);
 });
 
 
