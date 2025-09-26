@@ -4,7 +4,7 @@ What works
 - `make scrape10` → scrapes 10 listings with `rightmove_scraper.cli`, saves to `data/raw/listings_10.{csv,ndjson}`.
 - `make transform10` → local transform builds `LOCATION`, `ZONE`, reverse-geocodes `ADDRESS`, writes `data/processed/...` and prints summary.
 - `/docs` Pages chatbot renders with inline backend URL fallback, resilient config load, and documents wiring.
-- Cloudflare Worker live with KV + CORS; demo mode (`ALLOW_DEMO_FREE=true`) returns stubbed answer w/out token while still supporting Stripe tokens when configured.
+- Cloudflare Worker live with KV + CORS (including preview subdomains); demo mode (`ALLOW_DEMO_FREE=true`) returns stubbed answer w/out token while still supporting Stripe tokens when configured.
 
 What’s left / enhancements
 - Replace mock geocoder with provider; add caching.
@@ -20,3 +20,4 @@ Known issues / risks
 - Nominatim geocoding is rate limited (~1 req/sec); batch sizes should remain small.
 - Snowflake SQL API path requires OAuth token or client session; ensure secret rotation and minimal logging.
 - Pages rewrite rules can still bypass `config.json`; ensure inline config stays updated with Worker URL.
+- Preview deployments require wildcard CORS to keep chat working; verify `ALLOW_ORIGIN` stays in sync with Pages domains.

@@ -13,7 +13,7 @@ Recent changes
 - Added `pipeline/local_rightmove_transform.py`: builds LOCATION, computes ZONE, reverse-geocodes ADDRESS via geopy.
 - Built `/docs` static mini chatbot (dark UI) and wiring guide; backend stubs under `/backend` (Cloudflare Worker).
 - Removed dummy `scraper/` CLI/stubs; added .gitignore to exclude secrets, outputs, and unneeded code.
-- Deployed Cloudflare Worker: `london-portfolio-backend` with KV `USAGE_TOKENS`, CORS `ALLOW_ORIGIN=https://rightmove-london-portfolio.pages.dev`.
+- Deployed Cloudflare Worker: `london-portfolio-backend` with KV `USAGE_TOKENS`, CORS wildcard support for Pages preview subdomains.
 - Pages project serves `/docs` and points frontend to Worker `backend_base_url`.
 - Worker now supports `ALLOW_DEMO_FREE` mode (5 free queries) and accepts `{question|query}` payloads; inline backend URL injected in `index.html` to avoid missing `config.json`.
 
@@ -26,4 +26,4 @@ Active decisions
 - Outputs live under `data/raw` and `data/processed`; these are gitignored.
 - Use `rightmove_scraper.cli` directly for scraping 10 listings; geopy used for ADDRESS locally.
 - Secrets and Snowflake-only scripts are untracked and ignored in this portfolio repo.
-- Stripe flow temporarily disabled on frontend; rely on 5 free local uses while backend keeps token logic behind `ALLOW_DEMO_FREE` flag.
+- Stripe flow temporarily disabled on frontend; rely on 5 free local uses while backend keeps token logic behind `ALLOW_DEMO_FREE` flag and permissive CORS list.
