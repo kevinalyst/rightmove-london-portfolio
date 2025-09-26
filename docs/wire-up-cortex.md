@@ -9,41 +9,40 @@ Pick one and deploy the included stubs under `/backend`:
 - Option C: Vercel / Netlify Functions
 
 The backend exposes three endpoints:
-1. POST `/api/create-checkout-session` → creates a $1 Stripe Checkout session (PRICE_ID placeholder).
-2. GET `/api/grant?session_id=...` → exchanges a successful Stripe session for a one-time usage token (JWT).
-3. POST `/api/chat` (Bearer token) → verifies token, calls Snowflake Cortex, returns JSON.
+1. POST `/api/create-checkout-session` → creates a Stripe Checkout session (PRICE_ID placeholder).
+2. GET `/api/grant?session_id=...` → verifies session, mints a 10‑query token (KV‑backed).
+3. POST `/api/chat` (Bearer token) → verifies token, decrements credits, calls Snowflake Cortex.
 
-## Config
-- Frontend `/docs/config.json` (no secrets):
-{"stripe_public_key":"pk_live_PLACEHOLDER","checkout_price_id":"price_PLACEHOLDER","backend_base_url":"https://YOUR_BACKEND_HOST"}
-- Backend `.env.sample` (copy to `.env` in your deployment):
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_PRICE_ID=price_...
-JWT_SIGNING_KEY=please-change-me
-SNOWFLAKE_ACCOUNT=ORG-ACCT
-SNOWFLAKE_USER=...
-SNOWFLAKE_PASSWORD=...
-SNOWFLAKE_WAREHOUSE=...
-SNOWFLAKE_DATABASE=...
-SNOWFLAKE_SCHEMA=...
+## Cloudflare Workers quick steps
+1) Install/login
+- `npm i -g wrangler`
+- `wrangler login`
+2) KV binding
+- `cd backend/cloudflare`
+- `wrangler kv:namespace create USAGE_TOKENS` → paste id in `wrangler.toml`
+3) Secrets (no quotes)
+- `wrangler secret put STRIPE_SECRET_KEY`
+- `wrangler secret put STRIPE_PRICE_ID` (use your price id)
+- `wrangler secret put JWT_SIGNING_KEY`
+- Snowflake: `wrangler secret put SNOWFLAKE_ACCOUNT`, `..._USER`, `..._WAREHOUSE`, `..._DATABASE`, `..._SCHEMA`, and either `..._PASSWORD` or key‑pair
+4) Deploy
+- `wrangler deploy`
+- Take the Worker URL → put in `docs/config.json` as `backend_base_url`
+
+## Stripe setup
+- Product: “London Property Chat — 10‑Query Pack”
+- Description: “One‑time purchase of 10 questions to the London Property AI assistant.”
+- Use your Price ID in Worker secret `STRIPE_PRICE_ID`.
+- Flow: frontend calls `/api/create-checkout-session` → redirect → back to Pages with `session_id` → call `/api/grant` → store token.
 
 ## Snowflake Cortex call pattern
-- Use Snowflake SQL API or official client to call your Cortex endpoint/SQL.
-- Send the user prompt and optionally a grounding table/view (e.g., your transformed sample).
-- Return the text output to the frontend.
-
-Flow (described):
-1. Backend receives POST `/api/chat` with `{query}` and Bearer token.
-2. Verify token → single use, short TTL → mark consumed.
-3. Run SQL like: select snowflake.cortex.complete('MODEL_OR_VIEW', {prompt: :prompt});
-4. Map result to `{ "text": "..." }` and return.
+- Use Snowflake SQL API from the Worker.
+- Example statement: `select snowflake.cortex.complete('MODEL_OR_VIEW', {prompt => :1});`
+- Bind `:1` with user prompt; set `warehouse`, `database`, `schema` in payload.
+- Return the text to the frontend; log only timings and sizes.
 
 ## Ops notes
-- Rate limiting: 1 request per token (credits:1).
-- Limits: cap prompt size; truncate overly long inputs.
-- Logging: hash any user identifiers; never log raw PII.
-- Fallbacks: return a friendly error if Cortex/Stripe is unavailable.
-
-## GitHub Pages
-- Settings → Pages → Build from `/docs` on `main`.
-- Add `/docs/assets/social-preview.png` for a social card.
+- Tokens: KV with `{credits:10, exp, sessionId}`; one token per checkout.
+- Limits: trim prompt length; reject empty inputs.
+- Privacy: do not log raw prompts or PII.
+- CORS: allow your Pages origin only.

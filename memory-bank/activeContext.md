@@ -12,6 +12,8 @@ Recent changes
 - Added `pipeline/local_rightmove_transform.py`: builds LOCATION, computes ZONE, reverse-geocodes ADDRESS via geopy.
 - Built `/docs` static mini chatbot (dark UI) and wiring guide; backend stubs under `/backend` (Cloudflare Worker).
 - Removed dummy `scraper/` CLI/stubs; added .gitignore to exclude secrets, outputs, and unneeded code.
+- Deployed Cloudflare Worker: `london-portfolio-backend` with KV `USAGE_TOKENS`, CORS `ALLOW_ORIGIN=https://rightmove-london-portfolio.pages.dev`.
+- Pages project serves `/docs` and points frontend to Worker `backend_base_url`.
 
 Next steps
 - Optional: enable GitHub Pages for `/docs`; add social preview link in README.
@@ -21,3 +23,4 @@ Active decisions
 - Outputs live under `data/raw` and `data/processed`; these are gitignored.
 - Use `rightmove_scraper.cli` directly for scraping 10 listings; geopy used for ADDRESS locally.
 - Secrets and Snowflake-only scripts are untracked and ignored in this portfolio repo.
+- Stripe product: “London Property Chat — 10‑Query Pack”; token grants 10 credits, TTL 15m; KV-enforced one‑time use per credit.

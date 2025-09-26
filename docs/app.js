@@ -1,6 +1,7 @@
 const State = { idle: 'idle', querying: 'querying', error: 'error' };
 let state = State.idle;
-let config = { backend_base_url: '' };
+let configError = '';
+let config = { backend_base_url: typeof window !== 'undefined' ? (window.__BACKEND_BASE_URL || '') : '' };
 
 const STORAGE_KEY = 'demoFreeUses';
 const INITIAL_USES = 5;
@@ -16,16 +17,35 @@ const els = {
   announcer: document.getElementById('a11y-announcer'),
 };
 
+function setConfigError(message){
+  configError = message;
+  console.warn('[config]', message);
+}
+
 async function loadConfig(){
+  if (config.backend_base_url){
+    return;
+  }
   try{
     const res = await fetch('config.json', { cache: 'no-store' });
-    if (res.ok){
-      const json = await res.json();
-      if (json && typeof json.backend_base_url === 'string'){
-        config.backend_base_url = json.backend_base_url;
-      }
+    if (!res.ok){
+      throw new Error(`config.json status ${res.status}`);
     }
-  } catch{}
+    const text = await res.text();
+    try{
+      const json = JSON.parse(text);
+      if (json && typeof json.backend_base_url === 'string' && json.backend_base_url){
+        config.backend_base_url = json.backend_base_url;
+        configError = '';
+        return;
+      }
+      throw new Error('backend_base_url missing in config.json');
+    } catch(e){
+      throw new Error(`config.json parse error: ${e.message}`);
+    }
+  } catch(err){
+    setConfigError(err.message || 'Failed to load config.json');
+  }
 }
 
 function getRemainingUses(){
@@ -264,6 +284,11 @@ async function sendChat({ overrideMode = null, overrideViz = null } = {}){
   if (!text) return;
   if (getRemainingUses() <= 0){
     updateUsesUI();
+    return;
+  }
+  if (!config.backend_base_url){
+    setState(State.error);
+    addMessage('assistant', 'Setup incomplete: backend URL not configured. Please redeploy the site with docs/config.json or inline backend_base_url.');
     return;
   }
   const mode = overrideMode || currentMode();
