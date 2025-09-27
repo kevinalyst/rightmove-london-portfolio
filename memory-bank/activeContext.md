@@ -27,4 +27,4 @@ Active decisions
 - Outputs live under `data/raw` and `data/processed`; these are gitignored.
 - Use `rightmove_scraper.cli` directly for scraping 10 listings; geopy used for ADDRESS locally.
 - Secrets and Snowflake-only scripts are untracked and ignored in this portfolio repo.
-- Stripe flow temporarily disabled on frontend; rely on 5 free local uses while backend keeps token logic behind `ALLOW_DEMO_FREE` flag and permissive CORS list.
+- Backend Worker simplified: Stripe endpoints removed; remaining chat endpoint is open-access (no KV throttling) and still depends on Snowflake OAuth token for real answers.

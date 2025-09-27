@@ -2,16 +2,8 @@ name = "london-portfolio-backend"
 main = "src/index.js"
 compatibility_date = "2024-09-01"
 
-# Bind the KV namespace for usage tokens
-# Create via: wrangler kv:namespace create USAGE_TOKENS
-# Then paste the id below.
-[[kv_namespaces]]
-binding = "USAGE_TOKENS"
-id = "d1346f9d43a14cf8b356b75e509e1765"
-
 [vars]
 ALLOW_ORIGIN = "https://rightmove-london-portfolio.pages.dev,*.rightmove-london-portfolio.pages.dev,https://london-property-analysis.uk,*.london-property-analysis.uk"
-ALLOW_DEMO_FREE = "true"
 
 [observability]
 enabled = true
