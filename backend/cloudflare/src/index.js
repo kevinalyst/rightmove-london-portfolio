@@ -131,15 +131,22 @@ async function callSnowflake(env, prompt){
   const account = env.SNOWFLAKE_ACCOUNT;
   const host = account.includes('.') ? account : `${account}.snowflakecomputing.com`;
   const url = `https://${host}/api/v2/statements`;
+  const resource = env.SNOWFLAKE_CORTEX_RESOURCE || 'RIGHTMOVE_ANALYSIS';
+  const statement = "select snowflake.cortex.complete(:1, {prompt => :2});";
+  const binds = [resource, prompt];
   const body = {
-    statement: "select snowflake.cortex.complete('MODEL_OR_VIEW', {prompt => :1});",
-    binds: [prompt],
+    statement,
+    binds,
     timeout: 60,
     database: env.SNOWFLAKE_DATABASE,
     schema: env.SNOWFLAKE_SCHEMA,
     warehouse: env.SNOWFLAKE_WAREHOUSE
   };
-  const headers = { 'content-type':'application/json' };
+  const headers = {
+    'Content-Type':'application/json',
+    'Accept':'application/json',
+    'User-Agent':'london-portfolio-worker/1.0'
+  };
   if (env.SNOWFLAKE_OAUTH_TOKEN){
     headers['authorization'] = `Snowflake Token=\"${env.SNOWFLAKE_OAUTH_TOKEN}\"`;
   } else if (env.SNOWFLAKE_USER && env.SNOWFLAKE_PASSWORD){
@@ -185,6 +192,7 @@ async function chat(env, request){
       text = await callSnowflake(env, q);
     }
   } catch(e){
+    console.error('cortex_error', e?.message || e);
     text = 'Cortex backend currently unavailable.';
   }
 
