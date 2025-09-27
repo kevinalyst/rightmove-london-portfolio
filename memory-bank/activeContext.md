@@ -16,6 +16,7 @@ Recent changes
 - Deployed Cloudflare Worker: `london-portfolio-backend` with KV `USAGE_TOKENS`, CORS wildcard support for Pages preview subdomains and production `london-property-analysis.uk` domain.
 - Pages project serves `/docs` and points frontend to Worker `backend_base_url`.
 - Worker now supports `ALLOW_DEMO_FREE` mode (5 free queries) and accepts `{question|query}` payloads; inline backend URL injected in `index.html` to avoid missing `config.json`.
+- Snowflake Cortex wired via `RIGHTMOVE_ANALYSIS`; SQL API call now sets Accept/User-Agent/Bearer headers and binds resource/prompt explicitly (requires valid `SNOWFLAKE_OAUTH_TOKEN`).
 
 Next steps
 - Optional: enable GitHub Pages for `/docs`; add social preview link in README.

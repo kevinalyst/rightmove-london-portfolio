@@ -4,7 +4,7 @@ What works
 - `make scrape10` → scrapes 10 listings with `rightmove_scraper.cli`, saves to `data/raw/listings_10.{csv,ndjson}`.
 - `make transform10` → local transform builds `LOCATION`, `ZONE`, reverse-geocodes `ADDRESS`, writes `data/processed/...` and prints summary.
 - `/docs` Pages chatbot renders with inline backend URL fallback, resilient config load, and documents wiring.
-- Cloudflare Worker live with KV + CORS (including preview subdomains and production domain); demo mode (`ALLOW_DEMO_FREE=true`) returns stubbed answer w/out token while still supporting Stripe tokens when configured.
+- Cloudflare Worker live with KV + CORS (including preview subdomains and production domain); demo mode (`ALLOW_DEMO_FREE=true`) returns stubbed answer w/out token while still supporting Stripe tokens when configured; Snowflake Cortex call now hits `RIGHTMOVE_ANALYSIS` via SQL API once a valid `SNOWFLAKE_OAUTH_TOKEN` secret is supplied.
 
 What’s left / enhancements
 - Replace mock geocoder with provider; add caching.
