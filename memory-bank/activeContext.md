@@ -13,7 +13,7 @@ Recent changes
 - Added `pipeline/local_rightmove_transform.py`: builds LOCATION, computes ZONE, reverse-geocodes ADDRESS via geopy.
 - Built `/docs` static mini chatbot (dark UI) and wiring guide; backend stubs under `/backend` (Cloudflare Worker).
 - Removed dummy `scraper/` CLI/stubs; added .gitignore to exclude secrets, outputs, and unneeded code.
-- Deployed Cloudflare Worker: `london-portfolio-backend` with KV `USAGE_TOKENS`, CORS wildcard support for Pages preview subdomains and production `london-property-analysis.uk` domain.
+- Deployed Cloudflare Worker: `london-portfolio-backend` with permissive CORS support for Pages preview subdomains and production `london-property-analysis.uk` domain.
 - Pages project serves `/docs` and points frontend to Worker `backend_base_url`.
 - Worker now supports `ALLOW_DEMO_FREE` mode (5 free queries) and accepts `{question|query}` payloads; inline backend URL injected in `index.html` to avoid missing `config.json`.
 - Snowflake Cortex wired via `RIGHTMOVE_ANALYSIS`; SQL API call now sets Accept/User-Agent/Bearer headers and binds resource/prompt explicitly (requires valid `SNOWFLAKE_OAUTH_TOKEN`).
@@ -27,4 +27,4 @@ Active decisions
 - Outputs live under `data/raw` and `data/processed`; these are gitignored.
 - Use `rightmove_scraper.cli` directly for scraping 10 listings; geopy used for ADDRESS locally.
 - Secrets and Snowflake-only scripts are untracked and ignored in this portfolio repo.
-- Backend Worker simplified: Stripe endpoints removed; remaining chat endpoint is open-access (no KV throttling) and still depends on Snowflake OAuth token for real answers.
+- Backend Worker now calls Snowflake Cortex Agents REST endpoint (`RIGHTMOVE_ANALYSIS` in `SNOWFLAKE_INTELLIGENCE.AGENTS`) with OAuth bearer; expects SNOWFLAKE_AGENT_* env vars and no longer uses SQL API fallback.

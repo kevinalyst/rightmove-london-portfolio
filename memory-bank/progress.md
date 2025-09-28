@@ -4,7 +4,7 @@ What works
 - `make scrape10` → scrapes 10 listings with `rightmove_scraper.cli`, saves to `data/raw/listings_10.{csv,ndjson}`.
 - `make transform10` → local transform builds `LOCATION`, `ZONE`, reverse-geocodes `ADDRESS`, writes `data/processed/...` and prints summary.
 - `/docs` Pages chatbot renders with inline backend URL fallback, resilient config load, and documents wiring.
-- Cloudflare Worker live with permissive CORS; Stripe checkout paths removed, KV usage eliminated. Snowflake Cortex call still requires valid `SNOWFLAKE_OAUTH_TOKEN` or returns stub answer.
+- Cloudflare Worker live with permissive CORS; Stripe checkout paths removed, KV usage eliminated. Worker now calls Cortex Agents REST API (`RIGHTMOVE_ANALYSIS`) and requires `SNOWFLAKE_OAUTH_TOKEN` plus agent metadata env vars.
 
 What’s left / enhancements
 - Replace mock geocoder with provider; add caching.

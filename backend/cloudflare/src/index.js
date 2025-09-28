@@ -52,43 +52,99 @@ function bad(env, request, msg, code=400){
   });
 }
 
-async function callSnowflake(env, prompt){
-  const account = env.SNOWFLAKE_ACCOUNT;
+function requiredString(value, name){
+  if (!value || typeof value !== 'string'){
+    throw new Error(`${name} is required`);
+  }
+  return value;
+}
+
+function parseAgentResponse(agentPayload){
+  if (!agentPayload) return { text: 'No response from agent.', records: null, viz: null };
+
+  const responseEnvelope = agentPayload?.result || agentPayload?.response || agentPayload;
+
+  const messages = responseEnvelope?.messages;
+  let answer = '';
+  if (Array.isArray(messages)){
+    for (const message of messages){
+      const contents = message?.content;
+      if (!Array.isArray(contents)) continue;
+      for (const chunk of contents){
+        if (chunk?.type === 'TEXT' && typeof chunk?.text === 'string'){
+          answer += chunk.text;
+        }
+      }
+    }
+  }
+  if (!answer && typeof responseEnvelope?.output_text === 'string'){
+    answer = responseEnvelope.output_text;
+  }
+
+  let dataRows = null;
+  const toolResponses = responseEnvelope?.tool_responses;
+  if (Array.isArray(toolResponses)){
+    for (const tool of toolResponses){
+      const table = tool?.result?.table;
+      if (Array.isArray(table?.rows)){
+        dataRows = table.rows.map((row) => {
+          const obj = {};
+          const cols = table.columns || [];
+          row.forEach((val, idx) => {
+            const key = cols[idx]?.name || `col_${idx}`;
+            obj[key] = val;
+          });
+          return obj;
+        });
+        break;
+      }
+    }
+  }
+
+  return { text: answer || 'No response from agent.', records: dataRows, viz: null };
+}
+
+async function callCortexAgent(env, prompt){
+  const account = requiredString(env.SNOWFLAKE_ACCOUNT, 'SNOWFLAKE_ACCOUNT');
   const host = account.includes('.') ? account : `${account}.snowflakecomputing.com`;
-  const url = `https://${host}/api/v2/statements`;
-  const resource = env.SNOWFLAKE_CORTEX_RESOURCE || 'RIGHTMOVE_ANALYSIS';
-  const statement = "select snowflake.cortex.complete(:1, {prompt => :2});";
-  const binds = [resource, prompt];
+  const database = env.SNOWFLAKE_AGENT_DATABASE || 'SNOWFLAKE_INTELLIGENCE';
+  const schema = env.SNOWFLAKE_AGENT_SCHEMA || 'AGENTS';
+  const agentName = env.SNOWFLAKE_AGENT_NAME || 'RIGHTMOVE_ANALYSIS';
+  const token = requiredString(env.SNOWFLAKE_OAUTH_TOKEN, 'SNOWFLAKE_OAUTH_TOKEN');
+
+  const encodedParts = [database, schema, agentName].map((p) => encodeURIComponent(p));
+  const url = `https://${host}/api/v0/agents/${encodedParts[0]}/${encodedParts[1]}/${encodedParts[2]}/actions/runs?sync=true`;
+
   const body = {
-    statement,
-    binds,
-    timeout: 60,
-    database: env.SNOWFLAKE_DATABASE,
-    schema: env.SNOWFLAKE_SCHEMA,
-    warehouse: env.SNOWFLAKE_WAREHOUSE
+    input: {
+      messages: [
+        {
+          role: 'USER',
+          content: [
+            {
+              type: 'TEXT',
+              text: prompt
+            }
+          ]
+        }
+      ]
+    }
   };
+
   const headers = {
-    'Content-Type':'application/json',
-    'Accept':'application/json',
-    'User-Agent':'london-portfolio-worker/1.0'
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    'User-Agent': 'london-portfolio-worker/1.1'
   };
-  if (env.SNOWFLAKE_OAUTH_TOKEN){
-    headers['authorization'] = `Bearer ${env.SNOWFLAKE_OAUTH_TOKEN}`;
-  } else if (env.SNOWFLAKE_USER && env.SNOWFLAKE_PASSWORD){
-    // Basic auth session token flow is not implemented; prefer OAuth token
-    throw new Error('Snowflake token not configured');
-  } else {
-    throw new Error('Snowflake credentials missing');
-  }
-  const res = await fetch(url, { method:'POST', headers, body: JSON.stringify(body) });
+
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   if (!res.ok){
-    const t = await res.text();
-    throw new Error(`snowflake_error: ${t}`);
+    const errorPayload = await res.text();
+    throw new Error(`snowflake_agent_error: ${res.status} ${errorPayload}`);
   }
-  const d = await res.json();
-  const rows = d?.result?.data || d?.data || [];
-  const text = Array.isArray(rows) && rows.length ? String(rows[0][0]) : 'No response';
-  return text;
+  const json = await res.json();
+  return parseAgentResponse(json);
 }
 
 async function chat(env, request){
@@ -96,18 +152,18 @@ async function chat(env, request){
   const q = typeof body.query === 'string' ? body.query : (typeof body.question === 'string' ? body.question : '');
   if (!q) return bad(env, request, 'missing query', 400);
 
-  let text = 'Stubbed answer.';
+  let result = { text: 'Stubbed answer.', records: null, viz: null };
   try{
-    if (env.SNOWFLAKE_ACCOUNT && env.SNOWFLAKE_OAUTH_TOKEN){
-      text = await callSnowflake(env, q);
-    }
+    result = await callCortexAgent(env, q);
   } catch(e){
-    console.error('cortex_error', e?.message || e);
-    text = 'Cortex backend currently unavailable.';
+    console.error('cortex_agent_error', e?.message || e);
+    return bad(env, request, 'Cortex backend currently unavailable.', 503);
   }
 
   // Return both `answer` (preferred by frontend) and `text` for backward compatibility
-  const resp = { answer: text, text };
+  const resp = { answer: result.text, text: result.text };
+  if (result.records) resp.data = result.records;
+  if (result.viz) resp.viz = result.viz;
   if (body && body.viz) resp.viz = body.viz;
   return json(env, request, resp);
 }
