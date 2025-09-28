@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import List, Optional
-from lxml import html
 import re
+
+from lxml import html
 
 
 def _text_content(node) -> str:
@@ -11,7 +11,7 @@ def _text_content(node) -> str:
     return " ".join(node.itertext()).strip()
 
 
-def get_title(doc: html.HtmlElement) -> Optional[str]:
+def get_title(doc: html.HtmlElement) -> str | None:
     # Common selector for title header
     for xp in [
         '//h1[contains(@class, "_2uQQ3SV0eMHL1P6t5ZDo2q")]',
@@ -25,7 +25,7 @@ def get_title(doc: html.HtmlElement) -> Optional[str]:
     return None
 
 
-def get_price_text(doc: html.HtmlElement) -> Optional[str]:
+def get_price_text(doc: html.HtmlElement) -> str | None:
     # Rightmove price often in elements with data-testid or specific classes
     candidates = [
         '//*[@data-testid="price"]',
@@ -56,7 +56,7 @@ def get_price_text(doc: html.HtmlElement) -> Optional[str]:
     return None
 
 
-def get_summary_panel_value(doc: html.HtmlElement, label: str) -> Optional[str]:
+def get_summary_panel_value(doc: html.HtmlElement, label: str) -> str | None:
     xp = f'//dt[normalize-space()="{label}"]/following-sibling::dd[1]'
     nodes = doc.xpath(xp)
     if nodes:
@@ -65,7 +65,7 @@ def get_summary_panel_value(doc: html.HtmlElement, label: str) -> Optional[str]:
     return None
 
 
-def get_key_features(doc: html.HtmlElement) -> List[str]:
+def get_key_features(doc: html.HtmlElement) -> list[str]:
     headings = doc.xpath('//*[self::h2 or self::h3][contains(normalize-space(), "Key features")]')
     if headings:
         h = headings[0]
@@ -83,7 +83,7 @@ def get_key_features(doc: html.HtmlElement) -> List[str]:
     return []
 
 
-def get_description(doc: html.HtmlElement) -> Optional[str]:
+def get_description(doc: html.HtmlElement) -> str | None:
     # Click-expansion is done in the browser step; here we read text
     for xp in [
         '//*[self::h2 or self::h3][contains(translate(normalize-space(), "DESCRIPTION", "description"), "description")]',
@@ -91,7 +91,7 @@ def get_description(doc: html.HtmlElement) -> Optional[str]:
     ]:
         nodes = doc.xpath(xp)
         if nodes:
-            texts: List[str] = []
+            texts: list[str] = []
             n = nodes[0]
             cur = n.getnext()
             while cur is not None and cur.tag.lower() not in {"h2", "h3"}:
@@ -105,7 +105,7 @@ def get_description(doc: html.HtmlElement) -> Optional[str]:
     return None
 
 
-def _fact_following_value(doc: html.HtmlElement, label: str) -> Optional[str]:
+def _fact_following_value(doc: html.HtmlElement, label: str) -> str | None:
     # Try multiple patterns; Rightmove can render these in different panels
     xps = [
         f'//*[normalize-space()="{label}"]/following::*[1][self::div or self::span or self::p]',
@@ -121,7 +121,7 @@ def _fact_following_value(doc: html.HtmlElement, label: str) -> Optional[str]:
     return None
 
 
-def find_label_value_fuzzy(doc: html.HtmlElement, labels: list[str]) -> Optional[str]:
+def find_label_value_fuzzy(doc: html.HtmlElement, labels: list[str]) -> str | None:
     # Try several heuristics near the label text
     for label in labels:
         # 1) Exact text node containing label then next sibling
@@ -139,7 +139,7 @@ def find_label_value_fuzzy(doc: html.HtmlElement, labels: list[str]) -> Optional
     return None
 
 
-def derive_from_key_features(features: List[str], keywords: list[str]) -> Optional[str]:
+def derive_from_key_features(features: list[str], keywords: list[str]) -> str | None:
     text = "\n".join(features).lower()
     for kw in keywords:
         if kw in text:
@@ -150,7 +150,7 @@ def derive_from_key_features(features: List[str], keywords: list[str]) -> Option
     return None
 
 
-def get_fact_after_description(doc: html.HtmlElement, label: str) -> Optional[str]:
+def get_fact_after_description(doc: html.HtmlElement, label: str) -> str | None:
     """Extract a labelled fact specifically from the section shown under the Description area.
 
     Strategy:
@@ -208,7 +208,7 @@ def get_fact_after_description(doc: html.HtmlElement, label: str) -> Optional[st
     return None
 
 
-def get_fact_grid_value(doc: html.HtmlElement, label: str) -> Optional[str]:
+def get_fact_grid_value(doc: html.HtmlElement, label: str) -> str | None:
     """Find value from dl/dt/dd grids where dt starts with the label text.
 
     This targets the Facts row under the Description area on Rightmove which
@@ -224,11 +224,11 @@ def get_fact_grid_value(doc: html.HtmlElement, label: str) -> Optional[str]:
     return None
 
 
-def get_fact_value(doc: html.HtmlElement, label: str) -> Optional[str]:
+def get_fact_value(doc: html.HtmlElement, label: str) -> str | None:
     return _fact_following_value(doc, label)
 
 
-def get_agent(doc: html.HtmlElement) -> Optional[str]:
+def get_agent(doc: html.HtmlElement) -> str | None:
     for xp in [
         '//*[self::h2 or self::h3][contains(., "MARKETED BY")]/following::*[1]',
         '//*[contains(., "MARKETED BY")]/following::*[1]',
@@ -243,7 +243,7 @@ def get_agent(doc: html.HtmlElement) -> Optional[str]:
 
 # New helpers per template.csv
 
-def get_photo_urls(doc: html.HtmlElement, limit: int = 10) -> List[str]:
+def get_photo_urls(doc: html.HtmlElement, limit: int = 10) -> list[str]:
     """Extract up to `limit` full-size photo URLs in order.
 
     Heuristics:
@@ -251,7 +251,7 @@ def get_photo_urls(doc: html.HtmlElement, limit: int = 10) -> List[str]:
     - Fallback to <img> sources inside the photo collage/thumb strip
     - De-duplicate and keep order
     """
-    urls: List[str] = []
+    urls: list[str] = []
     seen: set[str] = set()
 
     # 1) Prefer itemprop contentUrl nodes
@@ -281,7 +281,7 @@ def get_photo_urls(doc: html.HtmlElement, limit: int = 10) -> List[str]:
     return urls[:limit]
 
 
-def get_floorplan_url(doc: html.HtmlElement) -> Optional[str]:
+def get_floorplan_url(doc: html.HtmlElement) -> str | None:
     """Extract a floorplan image URL if present.
 
     Normalize resized variants to the original full-size URL by:
@@ -309,7 +309,7 @@ def get_floorplan_url(doc: html.HtmlElement) -> Optional[str]:
     return None
 
 
-def get_agent_address(doc: html.HtmlElement) -> Optional[str]:
+def get_agent_address(doc: html.HtmlElement) -> str | None:
     """Extract the agent address block near 'About <agent>' or 'MARKETED BY'."""
     # Try the aside contact panel address title tooltip
     nodes = doc.xpath('//div[@class="OojFk4MTxFDKIfqreGNt0" and @title]')
@@ -333,7 +333,7 @@ def get_agent_address(doc: html.HtmlElement) -> Optional[str]:
     return None
 
 
-def get_agent_phone(doc: html.HtmlElement) -> Optional[str]:
+def get_agent_phone(doc: html.HtmlElement) -> str | None:
     # Look for tel: links or displayed numbers near contact tray
     for xp in [
         '//a[starts-with(@href, "tel:")]/@href',
@@ -357,7 +357,7 @@ def get_agent_phone(doc: html.HtmlElement) -> Optional[str]:
     return None
 
 
-def get_lat_lng(doc: html.HtmlElement) -> tuple[Optional[float], Optional[float]]:
+def get_lat_lng(doc: html.HtmlElement) -> tuple[float | None, float | None]:
     """Attempt to extract latitude/longitude from embedded scripts or map widgets.
 
     If not present, return (None, None). Snapshot pages sometimes omit coordinates.
@@ -376,7 +376,7 @@ def get_lat_lng(doc: html.HtmlElement) -> tuple[Optional[float], Optional[float]
     return None, None
 
 
-def get_listing_history(doc: html.HtmlElement) -> Optional[str]:
+def get_listing_history(doc: html.HtmlElement) -> str | None:
     """Extract recent listing history snippet (e.g., 'Reduced on 10/06/2025')."""
     # The history often appears near the mortgage widget/price area
     for xp in [

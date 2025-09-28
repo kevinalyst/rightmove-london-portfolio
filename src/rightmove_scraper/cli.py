@@ -2,25 +2,28 @@ from __future__ import annotations
 
 import asyncio
 import os
-from pathlib import Path
-from typing import Optional, List
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from pathlib import Path
 
 import typer
 from rich.console import Console
 
-from .config import load_config
-from .logging_setup import setup_logging
-from .compliance import assert_personal_use_banner, discovery_enabled
 from .browser import browser_context
-from .scrape_listing import scrape
+from .compliance import assert_personal_use_banner, discovery_enabled
+from .config import load_config
 from .datastore import write_records
+from .discovery import (
+    build_london_search_url,
+    build_search_url,
+    extract_listing_urls_from_search,
+    extract_total_results_from_search,
+)
+from .logging_setup import setup_logging
+from .scrape_listing import scrape
 from .seeds import load_seeds
-from .utils import polite_sleep, extract_rightmove_id, dedupe_preserve_order
-from .discovery import build_london_search_url, build_search_url, extract_listing_urls_from_search, extract_total_results_from_search
-from .slicer import Slice, borough_slices, partition, make_outcode_identifier, BOROUGH_TO_DISTRICTS
-
+from .slicer import BOROUGH_TO_DISTRICTS, Slice, borough_slices, partition
+from .utils import dedupe_preserve_order, extract_rightmove_id, polite_sleep
 
 app = typer.Typer(add_completion=False, help="Rightmove personal research scraper")
 
@@ -31,11 +34,11 @@ def scrape_seeds(
     out: str = typer.Option("./out", "--out", help="Output directory"),
     format: str = typer.Option("csv", "--format", help="csv|parquet|sqlite"),
     max: int = typer.Option(25, "--max", min=1, help="Max URLs to scrape"),
-    headless: Optional[bool] = typer.Option(None, help="Override headless"),
+    headless: bool | None = typer.Option(None, help="Override headless"),
     concurrency: int = typer.Option(1, "--concurrency", min=1, max=5, help="Parallel pages"),
     timeout: int = typer.Option(20, "--timeout", min=5, help="Per-page timeout seconds"),
-    batch_size: Optional[int] = typer.Option(None, "--batch-size", min=1, help="If set, write batch outputs after every N scraped records"),
-    batch_dir: Optional[str] = typer.Option(None, "--batch-dir", help="Directory for batch outputs; defaults to <out>/batches"),
+    batch_size: int | None = typer.Option(None, "--batch-size", min=1, help="If set, write batch outputs after every N scraped records"),
+    batch_dir: str | None = typer.Option(None, "--batch-dir", help="Directory for batch outputs; defaults to <out>/batches"),
 ):
     """Scrape property detail pages from a list of seed URLs."""
     cfg_overrides = {}
@@ -46,7 +49,7 @@ def scrape_seeds(
     cfg_overrides["request_timeout_sec"] = timeout
     cfg = load_config(cfg_overrides)
 
-    logger = setup_logging(cfg.log_level)
+    setup_logging(cfg.log_level)
     assert_personal_use_banner()
 
     urls = load_seeds(input)[:max]
@@ -132,8 +135,8 @@ def shard_seeds(
 
     Each shard is written as CSV with a single 'url' header, preserving original order.
     """
-    from pathlib import Path as _Path
     import csv as _csv
+    from pathlib import Path as _Path
 
     urls = load_seeds(input)
     n = len(urls)
@@ -189,7 +192,7 @@ def dump_snapshots(
 @app.command("validate")
 def validate(file: str = typer.Option(..., "--file")):
     import pandas as pd
-    from .models import Listing
+
 
     df = pd.read_csv(file)
     required_columns = [
@@ -219,16 +222,16 @@ def validate(file: str = typer.Option(..., "--file")):
 @app.command("discover-search")
 def discover_search(
     query: str = typer.Option("", "--query", help="Optional keyword filter"),
-    min_price: Optional[int] = typer.Option(None, "--min-price"),
-    max_price: Optional[int] = typer.Option(None, "--max-price"),
-    property_type: Optional[str] = typer.Option(None, "--type", help="detached|semi-detached|flat|terraced|bungalow"),
+    min_price: int | None = typer.Option(None, "--min-price"),
+    max_price: int | None = typer.Option(None, "--max-price"),
+    property_type: str | None = typer.Option(None, "--type", help="detached|semi-detached|flat|terraced|bungalow"),
     start_page: int = typer.Option(1, "--start-page", min=1, help="First page number (1-indexed)"),
     pages: int = typer.Option(1, "--pages", min=1, help="How many pages to fetch from start-page"),
     all: bool = typer.Option(False, "--all", help="Ignore --pages and paginate until no more results"),
     out: str = typer.Option("./out", "--out"),
 ):
     cfg = load_config()
-    logger = setup_logging(cfg.log_level)
+    setup_logging(cfg.log_level)
     assert_personal_use_banner()
 
     if not discovery_enabled():
@@ -242,7 +245,6 @@ def discover_search(
     async def _run():
         async with browser_context(cfg) as (_, __, page):
             p = start_page
-            fetched_any = False
             while True:
                 url = build_london_search_url(query=query, min_price=min_price, max_price=max_price, property_type=property_type, page=p)
                 await page.goto(url)
@@ -261,7 +263,6 @@ def discover_search(
                 console.log(f"Page {p}: found {len(page_urls)} property URLs")
                 urls.extend(page_urls)
                 polite_sleep(cfg.min_delay_sec, cfg.max_delay_sec)
-                fetched_any = True
                 if all:
                     if not page_urls:
                         break
@@ -275,8 +276,8 @@ def discover_search(
     asyncio.run(_run())
 
     # Write URLs to seeds.csv compatible file
-    from pathlib import Path
     import csv as _csv
+    from pathlib import Path
     Path(out).mkdir(parents=True, exist_ok=True)
     out_csv = Path(out) / "discovered_seeds.csv"
     with out_csv.open("w", newline="", encoding="utf-8") as f:
@@ -290,9 +291,9 @@ def discover_search(
 @app.command("scrape-search")
 def scrape_search(
     query: str = typer.Option("", "--query"),
-    min_price: Optional[int] = typer.Option(None, "--min-price"),
-    max_price: Optional[int] = typer.Option(None, "--max-price"),
-    property_type: Optional[str] = typer.Option(None, "--type"),
+    min_price: int | None = typer.Option(None, "--min-price"),
+    max_price: int | None = typer.Option(None, "--max-price"),
+    property_type: str | None = typer.Option(None, "--type"),
     start_page: int = typer.Option(1, "--start-page", min=1),
     pages: int = typer.Option(1, "--pages", min=1),
     all: bool = typer.Option(False, "--all"),
@@ -301,7 +302,7 @@ def scrape_search(
     max: int = typer.Option(50, "--max", min=1),
 ):
     cfg = load_config({"output_dir": out, "output_format": format})
-    logger = setup_logging(cfg.log_level)
+    setup_logging(cfg.log_level)
     assert_personal_use_banner()
 
     if not discovery_enabled():
@@ -370,20 +371,20 @@ def scrape_search(
 
 @app.command("discover-adaptive")
 def discover_adaptive(
-    min_price: Optional[int] = typer.Option(300000, "--min-price"),
-    max_price: Optional[int] = typer.Option(450000, "--max-price"),
-    property_type: Optional[str] = typer.Option(None, "--type", help="detached|semi-detached|flat|terraced|bungalow"),
-    query: Optional[str] = typer.Option("", "--query", help="Optional keyword filter"),
-    slices: Optional[str] = typer.Option(None, "--slices", help="Comma-separated slice names to run; 'null' or empty means all"),
-    start_page: Optional[int] = typer.Option(None, "--start-page", min=1, help="First page number (1-indexed)"),
-    pages: Optional[int] = typer.Option(None, "--pages", min=1, help="How many pages to fetch from start-page; omit for all"),
+    min_price: int | None = typer.Option(300000, "--min-price"),
+    max_price: int | None = typer.Option(450000, "--max-price"),
+    property_type: str | None = typer.Option(None, "--type", help="detached|semi-detached|flat|terraced|bungalow"),
+    query: str | None = typer.Option("", "--query", help="Optional keyword filter"),
+    slices: str | None = typer.Option(None, "--slices", help="Comma-separated slice names to run; 'null' or empty means all"),
+    start_page: int | None = typer.Option(None, "--start-page", min=1, help="First page number (1-indexed)"),
+    pages: int | None = typer.Option(None, "--pages", min=1, help="How many pages to fetch from start-page; omit for all"),
     list_only: bool = typer.Option(False, "--list-only", help="Only list available slice names and exit"),
     timeout: int = typer.Option(45, "--timeout", min=10, help="Per-page timeout seconds"),
     out: str = typer.Option("./out", "--out"),
 ):
     """Discover URLs across London using adaptive slicing (borough → district → price)."""
     cfg = load_config({"request_timeout_sec": timeout})
-    logger = setup_logging(cfg.log_level)
+    setup_logging(cfg.log_level)
     assert_personal_use_banner()
 
     if not discovery_enabled():
@@ -393,7 +394,7 @@ def discover_adaptive(
     from rich.console import Console
     console = Console()
 
-    async def _count(page, location_identifier: str, *, min_price: Optional[int], max_price: Optional[int], query: str = "", property_type: Optional[str] = None) -> int:
+    async def _count(page, location_identifier: str, *, min_price: int | None, max_price: int | None, query: str = "", property_type: str | None = None) -> int:
         url = build_search_url(location_identifier=location_identifier, query=query, min_price=min_price, max_price=max_price, property_type=property_type, page=1)
         await page.goto(url, wait_until="domcontentloaded")
         # Try to accept cookies/banner if present
@@ -409,7 +410,7 @@ def discover_adaptive(
         def __init__(self, page):
             self.page = page
 
-        async def count(self, location_identifier: str, *, min_price: Optional[int], max_price: Optional[int], query: str, property_type: Optional[str]) -> int:
+        async def count(self, location_identifier: str, *, min_price: int | None, max_price: int | None, query: str, property_type: str | None) -> int:
             return await _count(self.page, location_identifier, min_price=min_price, max_price=max_price, query=query, property_type=property_type)
 
     urls: list[str] = []
@@ -458,7 +459,7 @@ def discover_adaptive(
 
             # De-duplicate slices by (location_identifier, price_min, price_max)
             deduped: list[Slice] = []
-            seen_keys: set[tuple[str, Optional[int], Optional[int]]] = set()
+            seen_keys: set[tuple[str, int | None, int | None]] = set()
             for s in final_slices:
                 key = (s.location_identifier, s.price_min, s.price_max)
                 if key not in seen_keys:
@@ -526,8 +527,8 @@ def discover_adaptive(
     from .utils import dedupe_preserve_order
     deduped = dedupe_preserve_order(urls)
 
-    from pathlib import Path
     import csv as _csv
+    from pathlib import Path
     Path(out).mkdir(parents=True, exist_ok=True)
     out_csv = Path(out) / "discovered_adaptive_seeds.csv"
     with out_csv.open("w", newline="", encoding="utf-8") as f:
@@ -540,10 +541,10 @@ def discover_adaptive(
 
 @app.command("plan-adaptive")
 def plan_adaptive(
-    query: Optional[str] = typer.Option("", "--query", help="Optional keyword filter (for sizing)"),
-    min_price: Optional[int] = typer.Option(None, "--min-price"),
-    max_price: Optional[int] = typer.Option(None, "--max-price"),
-    property_type: Optional[str] = typer.Option(None, "--type", help="detached|semi-detached|flat|terraced|bungalow (for sizing)"),
+    query: str | None = typer.Option("", "--query", help="Optional keyword filter (for sizing)"),
+    min_price: int | None = typer.Option(None, "--min-price"),
+    max_price: int | None = typer.Option(None, "--max-price"),
+    property_type: str | None = typer.Option(None, "--type", help="detached|semi-detached|flat|terraced|bungalow (for sizing)"),
     timeout: int = typer.Option(45, "--timeout", min=10, help="Per-page timeout seconds"),
     plan_dir: str = typer.Option("./out", "--plan-dir", help="Base directory where the plan txt will be saved"),
 ):
@@ -552,7 +553,7 @@ def plan_adaptive(
     Output path format: <plan_dir>/<query-or-n>/<min-or-n>/<max-or-n>/<type-or-n>.txt
     """
     cfg = load_config({"request_timeout_sec": timeout})
-    _ = setup_logging(cfg.log_level)
+    setup_logging(cfg.log_level)
     assert_personal_use_banner()
 
     if not discovery_enabled():
@@ -570,7 +571,7 @@ def plan_adaptive(
 
     async def _run():
         async with browser_context(cfg) as (_, __, page):
-            async def _count(location_identifier: str, *, min_price: Optional[int], max_price: Optional[int]) -> int:
+            async def _count(location_identifier: str, *, min_price: int | None, max_price: int | None) -> int:
                 url = build_search_url(location_identifier=location_identifier, query=query or "", min_price=min_price, max_price=max_price, property_type=property_type, page=1)
                 await page.goto(url, wait_until="domcontentloaded")
                 try:
@@ -585,7 +586,7 @@ def plan_adaptive(
                 def __init__(self, page):
                     self.page = page
 
-                async def count(self, location_identifier: str, *, min_price: Optional[int], max_price: Optional[int], query: str, property_type: Optional[str]) -> int:
+                async def count(self, location_identifier: str, *, min_price: int | None, max_price: int | None, query: str, property_type: str | None) -> int:
                     return await _count(location_identifier, min_price=min_price, max_price=max_price)
 
             final_slices: list[Slice] = []
@@ -600,7 +601,7 @@ def plan_adaptive(
 
             # De-duplicate slices by (location_identifier, price_min, price_max)
             deduped: list[Slice] = []
-            seen_keys: set[tuple[str, Optional[int], Optional[int]]] = set()
+            seen_keys: set[tuple[str, int | None, int | None]] = set()
             for s in final_slices:
                 key = (s.location_identifier, s.price_min, s.price_max)
                 if key not in seen_keys:
@@ -621,7 +622,7 @@ def plan_adaptive(
                 f.write(f"# min_price: {min_price if min_price is not None else ''}\n")
                 f.write(f"# max_price: {max_price if max_price is not None else ''}\n")
                 f.write(f"# property_type: {property_type or ''}\n")
-                f.write(f"# generated_at: {datetime.now(timezone.utc).isoformat()}\n")
+                f.write(f"# generated_at: {datetime.now(UTC).isoformat()}\n")
                 for s in final_slices:
                     f.write(f"{s.name}|{s.location_identifier}|{s.price_min if s.price_min is not None else ''}|{s.price_max if s.price_max is not None else ''}\n")
 
@@ -633,18 +634,18 @@ def plan_adaptive(
 @app.command("discover-from-plan")
 def discover_from_plan(
     plan_file: str = typer.Option(..., "--plan-file", help="Path to plan txt generated by plan-adaptive"),
-    start_slice: Optional[int] = typer.Option(None, "--start-slice", min=1, help="1-based slice index to start from; omit for first"),
-    start_page: Optional[int] = typer.Option(None, "--start-page", min=1, help="1-based page index per slice; omit for 1"),
-    pages: Optional[int] = typer.Option(None, "--pages", min=1, help="How many pages per slice from start; omit for all until empty"),
+    start_slice: int | None = typer.Option(None, "--start-slice", min=1, help="1-based slice index to start from; omit for first"),
+    start_page: int | None = typer.Option(None, "--start-page", min=1, help="1-based page index per slice; omit for 1"),
+    pages: int | None = typer.Option(None, "--pages", min=1, help="How many pages per slice from start; omit for all until empty"),
     timeout: int = typer.Option(45, "--timeout", min=10, help="Per-page timeout seconds"),
     out: str = typer.Option("./out", "--out"),
-    per_slice_dir: Optional[str] = typer.Option(None, "--per-slice-dir", help="If set, write CSV per slice: rightmove_id,url,slicer_name"),
-    slice_count: Optional[int] = typer.Option(None, "--slice-count", min=1, help="Process N slices starting from start-slice"),
+    per_slice_dir: str | None = typer.Option(None, "--per-slice-dir", help="If set, write CSV per slice: rightmove_id,url,slicer_name"),
+    slice_count: int | None = typer.Option(None, "--slice-count", min=1, help="Process N slices starting from start-slice"),
     skip_merged: bool = typer.Option(False, "--skip-merged", help="If true, do not write merged discovered_adaptive_seeds.csv"),
 ):
     """Read a slice plan and collect listing URLs for the selected range of slices in order."""
     cfg = load_config({"request_timeout_sec": timeout})
-    _ = setup_logging(cfg.log_level)
+    setup_logging(cfg.log_level)
     assert_personal_use_banner()
 
     if not discovery_enabled():
@@ -658,10 +659,10 @@ def discover_from_plan(
 
     # Parse header and slices
     q: str = ""
-    t: Optional[str] = None
-    lo: Optional[int] = None
-    hi: Optional[int] = None
-    slices_data: list[tuple[str, str, Optional[int], Optional[int]]] = []
+    t: str | None = None
+    lo: int | None = None
+    hi: int | None = None
+    slices_data: list[tuple[str, str, int | None, int | None]] = []
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line:

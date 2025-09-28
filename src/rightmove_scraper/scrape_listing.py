@@ -1,40 +1,38 @@
 from __future__ import annotations
 
-import asyncio
-from typing import Optional
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from lxml import html
 from tenacity import retry, stop_after_attempt, wait_exponential_jitter
 
-from .browser import open_page, wait_for_text, maybe_click, wait_for_any_text
+from .browser import maybe_click, open_page, wait_for_any_text
 from .extractors import (
-    get_title,
-    get_price_text,
-    get_summary_panel_value,
-    get_key_features,
-    get_description,
-    get_fact_value,
-    get_agent,
-    find_label_value_fuzzy,
     derive_from_key_features,
-    get_fact_after_description,
-    get_fact_grid_value,
-    get_photo_urls,
-    get_floorplan_url,
+    find_label_value_fuzzy,
+    get_agent,
     get_agent_address,
     get_agent_phone,
+    get_description,
+    get_fact_after_description,
+    get_fact_grid_value,
+    get_fact_value,
+    get_floorplan_url,
+    get_key_features,
     get_lat_lng,
     get_listing_history,
+    get_photo_urls,
+    get_price_text,
+    get_summary_panel_value,
+    get_title,
 )
 from .models import Listing
-from .normalize import coerce_int, normalize_tenure, normalize_council_tax, parse_price
+from .normalize import coerce_int, normalize_council_tax, normalize_tenure, parse_price
 from .utils import extract_rightmove_id
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 
 @retry(wait=wait_exponential_jitter(initial=1, max=5), stop=stop_after_attempt(3))
-async def scrape(page, url: str) -> Optional[Listing]:
+async def scrape(page, url: str) -> Listing | None:
     await open_page(page, url)
     # Wait for any reliable marker to reduce timeouts across page variants
     await wait_for_any_text(page, [

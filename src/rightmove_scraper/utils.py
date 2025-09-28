@@ -3,8 +3,7 @@ from __future__ import annotations
 import random
 import re
 import time
-from typing import Iterable, List
-
+from collections.abc import Iterable
 
 RIGHTMOVE_URL_RE = re.compile(r"https?://(www\.)?rightmove\.co\.uk/properties/(\d+)")
 
@@ -21,9 +20,9 @@ def extract_rightmove_id(url: str) -> str:
     return match.group(2)
 
 
-def dedupe_preserve_order(urls: Iterable[str]) -> List[str]:
+def dedupe_preserve_order(urls: Iterable[str]) -> list[str]:
     seen: set[str] = set()
-    out: List[str] = []
+    out: list[str] = []
     for u in urls:
         if u not in seen:
             seen.add(u)

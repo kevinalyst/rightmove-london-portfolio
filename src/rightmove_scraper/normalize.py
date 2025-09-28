@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 
-def coerce_int(value: str | None) -> Optional[int]:
+def coerce_int(value: str | None) -> int | None:
     if value is None:
         return None
     m = re.search(r"\d+", value.replace(",", ""))
     return int(m.group()) if m else None
 
 
-def normalize_tenure(value: str | None) -> Optional[str]:
+def normalize_tenure(value: str | None) -> str | None:
     if value is None:
         return None
     v = value.strip().lower()
@@ -22,7 +21,7 @@ def normalize_tenure(value: str | None) -> Optional[str]:
     return value.strip()
 
 
-def normalize_council_tax(value: str | None) -> Optional[str]:
+def normalize_council_tax(value: str | None) -> str | None:
     if value is None:
         return None
     v = value.strip()
@@ -40,11 +39,11 @@ def normalize_council_tax(value: str | None) -> Optional[str]:
     return v
 
 
-def parse_price(text: str | None) -> tuple[Optional[int], Optional[str]]:
+def parse_price(text: str | None) -> tuple[int | None, str | None]:
     if not text:
         return None, None
     t = text.strip()
-    currency: Optional[str] = None
+    currency: str | None = None
     if "£" in t:
         currency = "GBP"
     elif "USD" in t or "$" in t:

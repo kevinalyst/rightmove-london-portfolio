@@ -1,11 +1,9 @@
 from __future__ import annotations
 
+import re
 import urllib.parse
-from typing import Iterable, List, Optional
 
 from lxml import html
-import re
-
 
 RIGHTMOVE_HOST = "https://www.rightmove.co.uk"
 
@@ -34,9 +32,9 @@ def build_london_search_url(query: str = "", min_price: int | None = None, max_p
     return build_search_url(location_identifier="REGION^87490", query=query, min_price=min_price, max_price=max_price, property_type=property_type, page=page)
 
 
-def extract_listing_urls_from_search(html_text: str) -> List[str]:
+def extract_listing_urls_from_search(html_text: str) -> list[str]:
     doc = html.fromstring(html_text)
-    urls: List[str] = []
+    urls: list[str] = []
     anchors = doc.xpath(
         '//*[@data-testid="propertyCard-link" or contains(@class, "propertyCard")]//a[contains(@href, "/properties/")][@href]'
         ' | //a[contains(@href, "/properties/")][@href]'
@@ -73,7 +71,7 @@ def extract_listing_urls_from_search(html_text: str) -> List[str]:
         return []
 
 
-def extract_total_results_from_search(html_text: str) -> Optional[int]:
+def extract_total_results_from_search(html_text: str) -> int | None:
     doc = html.fromstring(html_text)
     # Heuristic: look for text like "12,345 results" or "X properties found"
     full_text = " ".join(doc.xpath("//body//text()"))

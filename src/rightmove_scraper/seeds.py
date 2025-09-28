@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List
 
 from .utils import RIGHTMOVE_URL_RE, dedupe_preserve_order
 
@@ -13,11 +13,11 @@ def _read_lines(path: Path) -> Iterable[str]:
         yield line.strip()
 
 
-def load_seeds(path: str) -> List[str]:
+def load_seeds(path: str) -> list[str]:
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(path)
-    urls: List[str] = []
+    urls: list[str] = []
     if p.suffix.lower() in {".csv"}:
         with p.open(newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)

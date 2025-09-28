@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any
 
 try:
     from dotenv import load_dotenv
@@ -26,7 +26,7 @@ class AppConfig:
     log_level: str = "INFO"
 
     # runtime
-    extra: Dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 def _get_bool(value: str | None, default: bool) -> bool:
@@ -35,7 +35,7 @@ def _get_bool(value: str | None, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def load_config(overrides: Dict[str, Any] | None = None) -> AppConfig:
+def load_config(overrides: dict[str, Any] | None = None) -> AppConfig:
     overrides = overrides or {}
     cfg = AppConfig(
         user_agent=os.getenv("USER_AGENT") or None,

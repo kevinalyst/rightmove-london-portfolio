@@ -4,7 +4,7 @@ compatibility_date = "2024-09-01"
 
 [vars]
 ALLOW_ORIGIN = "https://rightmove-london-portfolio.pages.dev,*.rightmove-london-portfolio.pages.dev,https://london-property-analysis.uk,*.london-property-analysis.uk"
-SNOWFLAKE_ACCOUNT = "ZSVBFIR-AJ21181"
+SNOWFLAKE_ACCOUNT = "KA89655.eu-west2.gcp.snowflakecomputing.com"
 SNOWFLAKE_AGENT_DATABASE = "SNOWFLAKE_INTELLIGENCE"
 SNOWFLAKE_AGENT_SCHEMA = "AGENTS"
 SNOWFLAKE_AGENT_NAME = "RIGHTMOVE_ANALYSIS"

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import os
-from typing import List
 
 import pandas as pd
+
 from .models import Listing
 
 
@@ -11,7 +11,7 @@ def _ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-def write_records(records: List[Listing], output_dir: str, output_format: str = "csv") -> str:
+def write_records(records: list[Listing], output_dir: str, output_format: str = "csv") -> str:
     _ensure_dir(output_dir)
     df = pd.DataFrame([r.model_dump() for r in records])
     # Deduplicate by rightmove_id

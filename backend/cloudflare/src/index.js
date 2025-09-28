@@ -135,13 +135,16 @@ async function callCortexAgent(env, prompt){
     'Content-Type': 'application/json',
     'Accept': 'application/json',
     'Authorization': `Bearer ${token}`,
+    'X-Snowflake-Authorization-Token-Type': 'OAUTH',
     'User-Agent': 'london-portfolio-worker/1.1'
   };
 
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   if (!res.ok){
+    const requestId = res.headers.get('sf-query-id') || res.headers.get('x-snowflake-request-id');
     const errorPayload = await res.text();
-    throw new Error(`snowflake_agent_error: ${res.status} ${errorPayload}`);
+    const message = requestId ? `${res.status} ${errorPayload} (requestId=${requestId})` : `${res.status} ${errorPayload}`;
+    throw new Error(`snowflake_agent_error: ${message}`);
   }
   const json = await res.json();
   return parseAgentResponse(json);

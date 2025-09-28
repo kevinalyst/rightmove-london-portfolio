@@ -1,8 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Tuple
-
 
 CAP = 1000
 DEFAULT_MIN_PRICE = 0
@@ -14,10 +13,10 @@ class Slice:
     level: str  # "region" | "borough" | "district"
     name: str  # borough or district code
     location_identifier: str  # REGION^... or OUTCODE^...
-    price_min: Optional[int]
-    price_max: Optional[int]
+    price_min: int | None
+    price_max: int | None
 
-    def with_price(self, lo: Optional[int], hi: Optional[int]) -> "Slice":
+    def with_price(self, lo: int | None, hi: int | None) -> Slice:
         return Slice(
             level=self.level,
             name=self.name,
@@ -110,7 +109,7 @@ def make_outcode_identifier(outcode: str) -> str:
 
 
 class ResultCounter:
-    async def count(self, location_identifier: str, *, min_price: Optional[int], max_price: Optional[int], query: str, property_type: Optional[str]) -> int:
+    async def count(self, location_identifier: str, *, min_price: int | None, max_price: int | None, query: str, property_type: str | None) -> int:
         raise NotImplementedError
 
 
@@ -120,7 +119,7 @@ async def partition(
     result_counter: ResultCounter,
     district_provider: callable | None,
     query: str,
-    property_type: Optional[str],
+    property_type: str | None,
 ) -> Iterable[Slice]:
     # DFS partitioning adhering to CAP
     stack: list[Slice] = [initial_slice]
