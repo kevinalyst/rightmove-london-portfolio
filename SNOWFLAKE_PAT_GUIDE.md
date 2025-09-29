@@ -51,9 +51,8 @@ CREATE OR REPLACE USER cloudflare_api_user
 GRANT ROLE <your_role> TO USER cloudflare_api_user;
 
 -- Apply policies to the user
-ALTER USER cloudflare_api_user 
-  SET NETWORK_POLICY = cloudflare_api_policy
-  AUTHENTICATION_POLICY = pat_auth_policy;
+ALTER USER cloudflare_api_user SET NETWORK_POLICY = cloudflare_api_policy;
+ALTER USER cloudflare_api_user SET AUTHENTICATION POLICY pat_auth_policy;
 ```
 
 ### Step 4: Generate PAT Token
