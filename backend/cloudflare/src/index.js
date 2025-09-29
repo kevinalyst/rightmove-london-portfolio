@@ -104,7 +104,110 @@ function parseAgentResponse(agentPayload){
   return { text: answer || 'No response from agent.', records: dataRows, viz: null };
 }
 
-async function callCortexAgent(env, prompt){
+// Retry configuration
+const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1000;
+
+async function withRetry(fn, retries = MAX_RETRIES) {
+  let lastError;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const isRetryable = error.status === 429 || error.status === 503 || 
+                         error.status === 504 || error.message?.includes('timeout');
+      
+      if (i < retries && isRetryable) {
+        const delay = RETRY_DELAY_MS * Math.pow(2, i) * (0.5 + Math.random() * 0.5);
+        console.warn(`Retry ${i + 1}/${retries} after ${delay}ms: ${error.message}`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw error;
+      }
+    }
+  }
+  throw lastError;
+}
+
+async function callCortexSearch(env, query) {
+  const account = requiredString(env.SNOWFLAKE_ACCOUNT, 'SNOWFLAKE_ACCOUNT');
+  const host = account.includes('.') ? account : `${account}.snowflakecomputing.com`;
+  const database = env.SNOWFLAKE_SEARCH_DATABASE || 'RIGHTMOVE_LONDON_SELL';
+  const schema = env.SNOWFLAKE_SEARCH_SCHEMA || 'CLOUDRUN_DXLVF';
+  const serviceName = env.SNOWFLAKE_SEARCH_SERVICE || 'UNSTRUCTURED_RAG';
+  const token = requiredString(env.SNOWFLAKE_PAT_TOKEN, 'SNOWFLAKE_PAT_TOKEN');
+
+  const encodedParts = [database, schema, serviceName].map((p) => encodeURIComponent(p));
+  const url = `https://${host}/api/v0/services/${encodedParts[0]}/${encodedParts[1]}/${encodedParts[2]}:query`;
+
+  const body = {
+    query: query,
+    columns: ["*"], // Return all columns
+    limit: 10
+  };
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'Authorization': `Snowflake ${token}`,
+    'X-Snowflake-Authorization-Token-Type': 'PROGRAMMATIC_ACCESS_TOKEN',
+    'User-Agent': 'london-portfolio-worker/1.1'
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  
+  try {
+    const res = await fetch(url, { 
+      method: 'POST', 
+      headers, 
+      body: JSON.stringify(body),
+      signal: controller.signal 
+    });
+    
+    clearTimeout(timeout);
+    
+    if (!res.ok){
+      const requestId = res.headers.get('sf-query-id') || res.headers.get('x-snowflake-request-id');
+      const errorPayload = await res.text();
+      const message = requestId ? `${res.status} ${errorPayload} (requestId=${requestId})` : `${res.status} ${errorPayload}`;
+      const error = new Error(`snowflake_search_error: ${message}`);
+      error.status = res.status;
+      error.requestId = requestId;
+      throw error;
+    }
+    
+    const json = await res.json();
+    
+    // Parse search results
+    const results = json?.results || [];
+    const text = results.length > 0 
+      ? `Found ${results.length} properties matching your search.` 
+      : 'No properties found matching your search criteria.';
+    
+    return { 
+      text, 
+      records: results.map(r => r.body || r), 
+      viz: null 
+    };
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error.name === 'AbortError') {
+      const timeoutError = new Error(`Request timeout after ${REQUEST_TIMEOUT_MS}ms`);
+      timeoutError.status = 504;
+      throw timeoutError;
+    }
+    throw error;
+  }
+}
+
+async function callCortexAgent(env, prompt, mode = 'analyst'){
+  if (mode === 'search') {
+    return callCortexSearch(env, prompt);
+  }
+  
   const account = requiredString(env.SNOWFLAKE_ACCOUNT, 'SNOWFLAKE_ACCOUNT');
   const host = account.includes('.') ? account : `${account}.snowflakecomputing.com`;
   const database = env.SNOWFLAKE_AGENT_DATABASE || 'SNOWFLAKE_INTELLIGENCE';
@@ -114,6 +217,9 @@ async function callCortexAgent(env, prompt){
 
   const encodedParts = [database, schema, agentName].map((p) => encodeURIComponent(p));
   const url = `https://${host}/api/v0/agents/${encodedParts[0]}/${encodedParts[1]}/${encodedParts[2]}/actions/runs?sync=true`;
+  
+  console.log(`[callCortexAgent] URL: ${url}`);
+  console.log(`[callCortexAgent] Host: ${host}`);
 
   const body = {
     input: {
@@ -139,28 +245,82 @@ async function callCortexAgent(env, prompt){
     'User-Agent': 'london-portfolio-worker/1.1'
   };
 
-  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-  if (!res.ok){
-    const requestId = res.headers.get('sf-query-id') || res.headers.get('x-snowflake-request-id');
-    const errorPayload = await res.text();
-    const message = requestId ? `${res.status} ${errorPayload} (requestId=${requestId})` : `${res.status} ${errorPayload}`;
-    throw new Error(`snowflake_agent_error: ${message}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  
+  try {
+    const res = await fetch(url, { 
+      method: 'POST', 
+      headers, 
+      body: JSON.stringify(body),
+      signal: controller.signal 
+    });
+    
+    clearTimeout(timeout);
+    
+    if (!res.ok){
+      const requestId = res.headers.get('sf-query-id') || res.headers.get('x-snowflake-request-id');
+      const errorPayload = await res.text();
+      const message = requestId ? `${res.status} ${errorPayload} (requestId=${requestId})` : `${res.status} ${errorPayload}`;
+      const error = new Error(`snowflake_agent_error: ${message}`);
+      error.status = res.status;
+      error.requestId = requestId;
+      throw error;
+    }
+    const json = await res.json();
+    return parseAgentResponse(json);
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error.name === 'AbortError') {
+      const timeoutError = new Error(`Request timeout after ${REQUEST_TIMEOUT_MS}ms`);
+      timeoutError.status = 504;
+      throw timeoutError;
+    }
+    throw error;
   }
-  const json = await res.json();
-  return parseAgentResponse(json);
 }
 
 async function chat(env, request){
   const body = await request.json().catch(()=>({}));
   const q = typeof body.query === 'string' ? body.query : (typeof body.question === 'string' ? body.question : '');
+  const mode = body.mode || 'analyst'; // Default to analyst mode
+  
   if (!q) return bad(env, request, 'missing query', 400);
+  if (!['analyst', 'search'].includes(mode)) {
+    return bad(env, request, 'invalid mode: must be "analyst" or "search"', 400);
+  }
 
   let result = { text: 'Stubbed answer.', records: null, viz: null };
+  const correlationId = crypto.randomUUID();
+  
   try{
-    result = await callCortexAgent(env, q);
+    console.log(`[${correlationId}] Starting ${mode} request for query: ${q.substring(0, 100)}...`);
+    
+    result = await withRetry(() => callCortexAgent(env, q, mode));
+    
+    console.log(`[${correlationId}] Success: ${mode} request completed`);
   } catch(e){
-    console.error('cortex_agent_error', e?.message || e);
-    return bad(env, request, 'Cortex backend currently unavailable.', 503);
+    console.error(`[${correlationId}] Error in ${mode} request:`, {
+      message: e?.message || String(e),
+      status: e?.status,
+      requestId: e?.requestId,
+      stack: e?.stack
+    });
+    
+    // Return more specific error codes based on the error type
+    if (e?.status === 401 || e?.message?.includes('auth')) {
+      return bad(env, request, 'Authentication failed. Please check credentials.', 401);
+    }
+    if (e?.status === 404) {
+      return bad(env, request, 'Snowflake agent not found. Please check configuration.', 404);
+    }
+    if (e?.status === 504 || e?.message?.includes('timeout')) {
+      return bad(env, request, 'Request timed out. Please try again.', 504);
+    }
+    
+    // Generic error with details
+    const errorDetails = e?.requestId ? ` (requestId: ${e.requestId})` : '';
+    return bad(env, request, `Cortex backend error: ${e?.message || 'Unknown error'}${errorDetails}`, 502);
   }
 
   // Return both `answer` (preferred by frontend) and `text` for backward compatibility
@@ -171,14 +331,74 @@ async function chat(env, request){
   return json(env, request, resp);
 }
 
+async function health(env, request) {
+  const correlationId = crypto.randomUUID();
+  
+  try {
+    // Check required environment variables
+    const account = env.SNOWFLAKE_ACCOUNT;
+    const token = env.SNOWFLAKE_PAT_TOKEN;
+    const database = env.SNOWFLAKE_AGENT_DATABASE || 'SNOWFLAKE_INTELLIGENCE';
+    const schema = env.SNOWFLAKE_AGENT_SCHEMA || 'AGENTS';
+    const agentName = env.SNOWFLAKE_AGENT_NAME || 'RIGHTMOVE_ANALYSIS';
+    
+    if (!account) {
+      return json(env, request, { 
+        ok: false, 
+        error: 'SNOWFLAKE_ACCOUNT not configured' 
+      }, { status: 503 });
+    }
+    
+    if (!token) {
+      return json(env, request, { 
+        ok: false, 
+        error: 'SNOWFLAKE_PAT_TOKEN not configured' 
+      }, { status: 503 });
+    }
+    
+    // Simple connectivity check - we could do a lightweight API call here
+    // For now, just verify configuration is present
+    console.log(`[${correlationId}] Health check passed`);
+    
+    return json(env, request, { 
+      ok: true,
+      config: {
+        account: account.split('.')[0], // Don't expose full account URL
+        database,
+        schema,
+        agent: agentName
+      }
+    });
+  } catch (error) {
+    console.error(`[${correlationId}] Health check failed:`, error);
+    return json(env, request, { 
+      ok: false, 
+      error: error.message 
+    }, { status: 503 });
+  }
+}
+
 export default {
   async fetch(request, env){
     const url = new URL(request.url);
     const p = url.pathname;
+    
+    // Handle OPTIONS for CORS preflight
     if (request.method === 'OPTIONS'){
       return new Response(null, { status: 204, headers: corsHeaders(env, request) });
     }
-    if (request.method === 'POST' && p === '/api/chat') return chat(env, request);
+    
+    // Health check endpoint
+    if (request.method === 'GET' && p === '/api/health') {
+      return health(env, request);
+    }
+    
+    // Chat endpoint
+    if (request.method === 'POST' && p === '/api/chat') {
+      return chat(env, request);
+    }
+    
+    // Default response
     return new Response('ok', { headers: corsHeaders(env, request) });
   }
 };

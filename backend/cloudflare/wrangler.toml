@@ -5,10 +5,14 @@ compatibility_date = "2024-09-01"
 [vars]
 ALLOW_ORIGIN = "https://rightmove-london-portfolio.pages.dev,*.rightmove-london-portfolio.pages.dev,https://london-property-analysis.uk,*.london-property-analysis.uk"
 SNOWFLAKE_ACCOUNT = "KA89655.eu-west2.gcp.snowflakecomputing.com"
+# Cortex Agent configuration
 SNOWFLAKE_AGENT_DATABASE = "SNOWFLAKE_INTELLIGENCE"
 SNOWFLAKE_AGENT_SCHEMA = "AGENTS"
 SNOWFLAKE_AGENT_NAME = "RIGHTMOVE_ANALYSIS"
-SNOWFLAKE_TOKEN_TYPE_FALLBACK = "KEYPAIR_JWT"
+# Cortex Search configuration
+SNOWFLAKE_SEARCH_DATABASE = "RIGHTMOVE_LONDON_SELL"
+SNOWFLAKE_SEARCH_SCHEMA = "CLOUDRUN_DXLVF"
+SNOWFLAKE_SEARCH_SERVICE = "UNSTRUCTURED_RAG"
 
 [observability]
 enabled = true

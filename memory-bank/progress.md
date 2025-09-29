@@ -4,7 +4,7 @@ What works
 - `make scrape10` → scrapes 10 listings with `rightmove_scraper.cli`, saves to `data/raw/listings_10.{csv,ndjson}`.
 - `make transform10` → local transform builds `LOCATION`, `ZONE`, reverse-geocodes `ADDRESS`, writes `data/processed/...` and prints summary.
 - `/docs` Pages chatbot renders with inline backend URL fallback, resilient config load, and documents wiring.
-- Cloudflare Worker live with permissive CORS; Stripe checkout paths removed, KV usage eliminated. Worker now calls Cortex Agents REST API (`RIGHTMOVE_ANALYSIS`) with OAuth bearer + token-type header, expects fully qualified Snowflake account host, and requires `SNOWFLAKE_OAUTH_TOKEN` plus agent metadata env vars.
+- Cloudflare Worker live with permissive CORS; Stripe checkout paths removed, KV usage eliminated. Worker now calls Cortex Agents REST API (`RIGHTMOVE_ANALYSIS`) with PAT auth (`Authorization: Snowflake <token>` + `X-Snowflake-Authorization-Token-Type: PROGRAMMATIC_ACCESS_TOKEN`), expects fully qualified Snowflake account host, and requires `SNOWFLAKE_PAT_TOKEN` plus agent metadata env vars.
 
 What’s left / enhancements
 - Replace mock geocoder with provider; add caching.
@@ -18,6 +18,6 @@ Current status
 Known issues / risks
 - Rightmove anti‑bot mitigations; use conservative defaults and `consent.txt`.
 - Nominatim geocoding is rate limited (~1 req/sec); batch sizes should remain small.
-- Snowflake SQL API path requires OAuth token or client session; ensure secret rotation and minimal logging.
+- Snowflake Cortex Agents requires PAT token with specific auth headers; ensure secret rotation and minimal logging.
 - Pages rewrite rules can still bypass `config.json`; ensure inline config stays updated with Worker URL.
 - Preview deployments require wildcard CORS to keep chat working; verify `ALLOW_ORIGIN` stays in sync with Pages domains.
