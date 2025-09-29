@@ -148,11 +148,11 @@ async function callCortexSearch(env, query) {
     limit: 10
   };
 
+  // Use Bearer token format for PAT
   const headers = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'Authorization': `Snowflake ${token}`,
-    'X-Snowflake-Authorization-Token-Type': 'PROGRAMMATIC_ACCESS_TOKEN',
+    'Authorization': `Bearer ${token}`,
     'User-Agent': 'london-portfolio-worker/1.1'
   };
 
@@ -215,8 +215,9 @@ async function callCortexAgent(env, prompt, mode = 'analyst'){
   const agentName = env.SNOWFLAKE_AGENT_NAME || 'RIGHTMOVE_ANALYSIS';
   const token = requiredString(env.SNOWFLAKE_PAT_TOKEN, 'SNOWFLAKE_PAT_TOKEN');
 
+  // Try with v2 API endpoint instead of v0
   const encodedParts = [database, schema, agentName].map((p) => encodeURIComponent(p));
-  const url = `https://${host}/api/v0/agents/${encodedParts[0]}/${encodedParts[1]}/${encodedParts[2]}/actions/runs?sync=true`;
+  const url = `https://${host}/api/v2/databases/${encodedParts[0]}/schemas/${encodedParts[1]}/agents/${encodedParts[2]}/actions/runs?sync=true`;
   
   console.log(`[callCortexAgent] URL: ${url}`);
   console.log(`[callCortexAgent] Host: ${host}`);
@@ -237,13 +238,16 @@ async function callCortexAgent(env, prompt, mode = 'analyst'){
     }
   };
 
+  // Use Bearer token format - try without the X-Snowflake header first
+  // Some Snowflake REST endpoints auto-detect token type
   const headers = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'Authorization': `Snowflake ${token}`,
-    'X-Snowflake-Authorization-Token-Type': 'PROGRAMMATIC_ACCESS_TOKEN',
+    'Authorization': `Bearer ${token}`,
     'User-Agent': 'london-portfolio-worker/1.1'
   };
+  
+  console.log(`[callCortexAgent] Using Bearer auth (PAT auto-detect)`);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -260,7 +264,15 @@ async function callCortexAgent(env, prompt, mode = 'analyst'){
     
     if (!res.ok){
       const requestId = res.headers.get('sf-query-id') || res.headers.get('x-snowflake-request-id');
-      const errorPayload = await res.text();
+      let errorPayload;
+      try {
+        errorPayload = await res.text();
+      } catch (e) {
+        errorPayload = 'Unable to read error response';
+      }
+      
+      console.error(`[Snowflake Response] Status: ${res.status}, Body: ${errorPayload}, RequestId: ${requestId}`);
+      
       const message = requestId ? `${res.status} ${errorPayload} (requestId=${requestId})` : `${res.status} ${errorPayload}`;
       const error = new Error(`snowflake_agent_error: ${message}`);
       error.status = res.status;
@@ -276,6 +288,9 @@ async function callCortexAgent(env, prompt, mode = 'analyst'){
       timeoutError.status = 504;
       throw timeoutError;
     }
+    
+    console.error(`[Fetch Error] Name: ${error.name}, Message: ${error.message}, Stack: ${error.stack}`);
+    
     throw error;
   }
 }
