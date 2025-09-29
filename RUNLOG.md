@@ -108,6 +108,34 @@ HTTP 503 errors when Cloudflare Worker calls Snowflake Cortex Agent
 - Both return same 526 error from Snowflake
 - MCP tool successfully connects, so credentials are valid
 
+### Step 11: Account Mismatch Discovery
+**Time:** 2025-09-29 11:20
+**Hypothesis:** Wrong Snowflake account being used
+**Test:** Compare MCP config with Worker config
+**Result:**
+- **ROOT CAUSE FOUND**: Worker was using KA89655 account, but PAT was created in ZSVBFIR-AJ21181 account
+- Changed SNOWFLAKE_ACCOUNT to "ZSVBFIR-AJ21181" 
+- Removed X-Snowflake-Authorization-Token-Type header (auto-detect works)
+- Status changed from 526 (auth error) to 404 (not found) - authentication now working! ✅
+
+### Step 12: Agent Endpoint Investigation
+**Time:** 2025-09-29 11:25
+**Hypothesis:** REST API v2 agents endpoint may not exist or have different structure
+**Test:** Tried multiple endpoint structures
+**Result:**
+- Tried: `/api/v2/databases/{db}/schemas/{schema}/agents/{name}/actions/runs` → 404
+- Tried: `/api/v2/cortex/agent/completions` → 404
+- Agent exists and works via MCP (Python/SQL-based approach)
+- **Conclusion**: Cortex Agents REST API may not be publicly available yet, or requires different authentication/endpoint structure
+
+###  Step 13: Final Status
+**Time:** 2025-09-29 11:30
+**Result:**
+- ✅ **MAJOR PROGRESS**: Fixed authentication by using correct Snowflake account
+- ✅ Worker now successfully authenticates with PAT token (no more 526 errors)
+- ❌ **BLOCKING**: Cortex Agents REST API endpoint returns 404
+- **Workaround needed**: Consider using Snowflake SQL API to call agents via stored procedures or functions
+
 ## Summary of Findings
 
 ### What Works

@@ -215,27 +215,27 @@ async function callCortexAgent(env, prompt, mode = 'analyst'){
   const agentName = env.SNOWFLAKE_AGENT_NAME || 'RIGHTMOVE_ANALYSIS';
   const token = requiredString(env.SNOWFLAKE_PAT_TOKEN, 'SNOWFLAKE_PAT_TOKEN');
 
-  // Try with v2 API endpoint instead of v0
-  const encodedParts = [database, schema, agentName].map((p) => encodeURIComponent(p));
-  const url = `https://${host}/api/v2/databases/${encodedParts[0]}/schemas/${encodedParts[1]}/agents/${encodedParts[2]}/actions/runs?sync=true`;
+  // Use Cortex Agents API endpoint structure from Snowflake quickstarts
+  const url = `https://${host}/api/v2/cortex/agent/completions`;
   
   console.log(`[callCortexAgent] URL: ${url}`);
   console.log(`[callCortexAgent] Host: ${host}`);
+  console.log(`[callCortexAgent] Agent: ${database}.${schema}.${agentName}`);
 
+  // Use the format from Snowflake Agent API documentation
   const body = {
-    input: {
-      messages: [
-        {
-          role: 'USER',
-          content: [
-            {
-              type: 'TEXT',
-              text: prompt
-            }
-          ]
-        }
-      ]
-    }
+    agent: `${database}.${schema}.${agentName}`,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: prompt
+          }
+        ]
+      }
+    ]
   };
 
   // Use Bearer token format - try without the X-Snowflake header first
