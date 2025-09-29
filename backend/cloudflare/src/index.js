@@ -134,8 +134,8 @@ async function callCortexAgent(env, prompt){
   const headers = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'Authorization': `Bearer ${token}`,
-    'X-Snowflake-Authorization-Token-Type': 'KEYPAIR_JWT',
+    'Authorization': `Snowflake ${token}`,
+    'X-Snowflake-Authorization-Token-Type': 'PROGRAMMATIC_ACCESS_TOKEN',
     'User-Agent': 'london-portfolio-worker/1.1'
   };
 
