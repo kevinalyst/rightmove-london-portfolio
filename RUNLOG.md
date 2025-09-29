@@ -78,5 +78,62 @@ HTTP 503 errors when Cloudflare Worker calls Snowflake Cortex Agent
 **Time:** 2025-09-29 10:35
 **Hypothesis:** Update frontend to point directly to Worker URL as immediate fix
 **Test:** Update index.html backend URL and test
-**Result:** [In progress]
+**Result:** Frontend already pointing to Worker URL
+
+### Step 8: Detailed Error Analysis
+**Time:** 2025-09-29 10:40
+**Hypothesis:** 526 error might be from Snowflake, not Cloudflare
+**Test:** Add detailed logging and examine response
+**Result:**
+- Error IS coming from Snowflake API (status: 526, body: "error code: 526")
+- URL: https://KA89655.eu-west2.gcp.snowflakecomputing.com/api/v0/agents/...
+- Snowflake is returning HTTP 526 which is unusual
+- No request ID returned from Snowflake
+
+### Step 9: Verify Snowflake URL Format
+**Time:** 2025-09-29 10:45
+**Hypothesis:** Snowflake account URL might be incorrectly formatted
+**Test:** Use MCP to verify correct endpoint format
+**Result:** 
+- Tried both v0 and v2 API endpoints - both return 526
+- URL format appears correct: https://KA89655.eu-west2.gcp.snowflakecomputing.com
+- Error is definitely coming from Snowflake (not Cloudflare)
+
+### Step 10: Root Cause - 526 Error Investigation
+**Time:** 2025-09-29 10:50
+**Hypothesis:** Snowflake is returning 526 due to authentication or configuration issue
+**Test:** Research and test different authentication methods
+**Result:** 
+- Tried both "Snowflake" and "Bearer" authorization header prefixes
+- Both return same 526 error from Snowflake
+- MCP tool successfully connects, so credentials are valid
+
+## Summary of Findings
+
+### What Works
+✅ Worker deployed and accessible at https://london-portfolio-backend.axiuluo40.workers.dev
+✅ Health check endpoint implemented: GET /api/health returns 200
+✅ CORS properly configured: OPTIONS /api/chat returns 204
+✅ Mode support added (analyst/search)
+✅ Retry logic and timeout control implemented
+✅ Enhanced error logging shows Snowflake is returning 526
+
+### Root Cause
+❌ Snowflake API is returning HTTP 526 "error code: 526"
+❌ This is NOT a Cloudflare SSL error - it's coming from Snowflake itself
+❌ The 526 error occurs for both v0 and v2 API endpoints
+❌ Both "Snowflake" and "Bearer" auth prefixes fail
+
+### Blocking Issue
+The 526 error from Snowflake is preventing the Worker from functioning. This appears to be:
+1. An authentication/authorization issue with the PAT token
+2. A configuration issue with the Snowflake agent
+3. A network/firewall restriction
+
+### Recommended Next Steps
+1. Verify the SNOWFLAKE_PAT_TOKEN is valid and has correct permissions
+2. Check if the agent RIGHTMOVE_ANALYSIS exists in SNOWFLAKE_INTELLIGENCE.AGENTS
+3. Test the exact same request using curl directly (not through Worker)
+4. Contact Snowflake support about the 526 error code
+5. Consider using the SQL API endpoint instead of Cortex Agents as a fallback
 
