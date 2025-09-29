@@ -110,7 +110,7 @@ async function callCortexAgent(env, prompt){
   const database = env.SNOWFLAKE_AGENT_DATABASE || 'SNOWFLAKE_INTELLIGENCE';
   const schema = env.SNOWFLAKE_AGENT_SCHEMA || 'AGENTS';
   const agentName = env.SNOWFLAKE_AGENT_NAME || 'RIGHTMOVE_ANALYSIS';
-  const token = requiredString(env.SNOWFLAKE_OAUTH_TOKEN, 'SNOWFLAKE_OAUTH_TOKEN');
+  const token = requiredString(env.SNOWFLAKE_PAT_TOKEN, 'SNOWFLAKE_PAT_TOKEN');
 
   const encodedParts = [database, schema, agentName].map((p) => encodeURIComponent(p));
   const url = `https://${host}/api/v0/agents/${encodedParts[0]}/${encodedParts[1]}/${encodedParts[2]}/actions/runs?sync=true`;
@@ -135,7 +135,7 @@ async function callCortexAgent(env, prompt){
     'Content-Type': 'application/json',
     'Accept': 'application/json',
     'Authorization': `Bearer ${token}`,
-    'X-Snowflake-Authorization-Token-Type': 'OAUTH',
+    'X-Snowflake-Authorization-Token-Type': 'KEYPAIR_JWT',
     'User-Agent': 'london-portfolio-worker/1.1'
   };
 

@@ -15,8 +15,8 @@ Recent changes
 - Removed dummy `scraper/` CLI/stubs; added .gitignore to exclude secrets, outputs, and unneeded code.
 - Deployed Cloudflare Worker: `london-portfolio-backend` with permissive CORS support for Pages preview subdomains and production `london-property-analysis.uk` domain.
 - Pages project serves `/docs` and points frontend to Worker `backend_base_url`.
-- Worker now supports `ALLOW_DEMO_FREE` mode (5 free queries) and accepts `{question|query}` payloads; inline backend URL injected in `index.html` to avoid missing `config.json`.
-- Snowflake Cortex wired via `RIGHTMOVE_ANALYSIS`; SQL API call now sets Accept/User-Agent/Bearer headers and binds resource/prompt explicitly (requires valid `SNOWFLAKE_OAUTH_TOKEN`).
+- Worker now accepts `{question|query}` payloads; inline backend URL injected in `index.html` to avoid missing `config.json`.
+- Snowflake Cortex wired via `RIGHTMOVE_ANALYSIS`; Worker calls Cortex Agents REST API using Programmatic Access Token bearer (`X-Snowflake-Authorization-Token-Type=KEYPAIR_JWT`) and requires fully qualified `SNOWFLAKE_ACCOUNT` host (e.g. `…eu-west2.gcp.snowflakecomputing.com`).
 
 Next steps
 - Optional: enable GitHub Pages for `/docs`; add social preview link in README.
