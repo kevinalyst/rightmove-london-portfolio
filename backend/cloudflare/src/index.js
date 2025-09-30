@@ -89,11 +89,69 @@ function parseSSEStream(sseText){
 }
 
 function parseAgentResponse(agentPayload){
-  if (!agentPayload) return { text: 'No response from agent.', records: null, viz: null };
+  if (!agentPayload) return { text: 'No response from agent.', records: null, viz: null, thinking: [], sql: [] };
 
   // Handle SSE stream response
   if (typeof agentPayload === 'string' && agentPayload.includes('event:')) {
     const events = parseSSEStream(agentPayload);
+    
+    // Collect thinking process
+    const thinkingSteps = [];
+    const sqlCommands = [];
+    
+    // Log event types for debugging
+    const eventTypes = [...new Set(events.map(e => e.event))];
+    console.log('[parseAgentResponse] Event types found:', eventTypes.join(', '));
+    
+    for (const evt of events) {
+      // Capture thinking deltas
+      if (evt.event === 'response.thinking.delta' && evt.data?.text) {
+        thinkingSteps.push(evt.data.text);
+      }
+      
+      // Capture status updates (planning, reasoning, etc.)
+      if (evt.event === 'response.status' && evt.data?.message) {
+        thinkingSteps.push(`\n[${evt.data.status}] ${evt.data.message}\n`);
+      }
+      
+      // Capture execution traces which contain SQL
+      if (evt.event === 'execution_trace' && evt.data) {
+        const trace = evt.data;
+        
+        // Check for SQL in various trace fields
+        if (trace.input?.query) {
+          sqlCommands.push({
+            tool: trace.tool_name || 'analyst',
+            sql: trace.input.query
+          });
+        } else if (trace.sql) {
+          sqlCommands.push({
+            tool: trace.tool_name || trace.tool_type || 'analyst',
+            sql: trace.sql
+          });
+        } else if (trace.execution?.sql) {
+          sqlCommands.push({
+            tool: trace.tool_name || 'analyst',
+            sql: trace.execution.sql
+          });
+        }
+        
+        // Log for debugging
+        console.log(`[execution_trace] ${JSON.stringify(trace).substring(0, 300)}`);
+      }
+      
+      // Capture tool use events
+      if (evt.event.includes('tool_use') && evt.data) {
+        const toolData = evt.data;
+        
+        if (toolData.type?.includes('analyst') && toolData.input?.query) {
+          sqlCommands.push({
+            tool: toolData.name || toolData.type || 'analyst',
+            sql: toolData.input.query
+          });
+        }
+      }
+    }
     
     // Find the final 'response' event which contains the complete answer
     const responseEvent = events.find(e => e.event === 'response');
@@ -118,7 +176,15 @@ function parseAgentResponse(agentPayload){
         }
       }
       
-      return { text: answer || 'No response from agent.', records: dataRows, viz: null };
+      const thinkingText = thinkingSteps.join('');
+      
+      return { 
+        text: answer || 'No response from agent.', 
+        records: dataRows, 
+        viz: null,
+        thinking: thinkingText ? thinkingText : null,
+        sql: sqlCommands.length > 0 ? sqlCommands : null
+      };
     }
     
     // Fallback: collect all text deltas
@@ -129,7 +195,14 @@ function parseAgentResponse(agentPayload){
       }
     }
     
-    return { text: allText || 'No response from agent.', records: null, viz: null };
+    const thinkingText = thinkingSteps.join('');
+    return { 
+      text: allText || 'No response from agent.', 
+      records: null, 
+      viz: null,
+      thinking: thinkingText ? thinkingText : null,
+      sql: sqlCommands.length > 0 ? sqlCommands : null
+    };
   }
 
   // Handle JSON response (legacy or MCP format)
@@ -420,6 +493,11 @@ async function chat(env, request){
   if (result.records) resp.data = result.records;
   if (result.viz) resp.viz = result.viz;
   if (body && body.viz) resp.viz = body.viz;
+  
+  // Include thinking process and SQL commands for transparency
+  if (result.thinking) resp.thinking = result.thinking;
+  if (result.sql && result.sql.length > 0) resp.sql = result.sql;
+  
   return json(env, request, resp);
 }
 

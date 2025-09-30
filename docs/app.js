@@ -86,6 +86,83 @@ function setState(next){
   }
 }
 
+function renderThinkingProcess(parent, thinking){
+  if (!thinking || thinking.trim() === '') return;
+  
+  const details = document.createElement('details');
+  details.className = 'thinking-details';
+  details.open = false; // Collapsed by default
+  
+  const summary = document.createElement('summary');
+  summary.textContent = '🤔 Agent Thinking Process';
+  summary.style.cursor = 'pointer';
+  summary.style.color = '#6b7280';
+  summary.style.fontSize = '0.9em';
+  summary.style.marginBottom = '8px';
+  
+  const content = document.createElement('pre');
+  content.style.fontSize = '0.85em';
+  content.style.color = '#9da7b3';
+  content.style.backgroundColor = '#161b22';
+  content.style.padding = '12px';
+  content.style.borderRadius = '6px';
+  content.style.overflowX = 'auto';
+  content.style.marginTop = '8px';
+  content.textContent = thinking;
+  
+  details.appendChild(summary);
+  details.appendChild(content);
+  parent.appendChild(details);
+}
+
+function renderSQLCommands(parent, sqlArray){
+  if (!sqlArray || sqlArray.length === 0) return;
+  
+  const details = document.createElement('details');
+  details.className = 'sql-details';
+  details.open = true; // Expanded by default to show SQL
+  
+  const summary = document.createElement('summary');
+  summary.textContent = `⚡ SQL Commands (${sqlArray.length})`;
+  summary.style.cursor = 'pointer';
+  summary.style.color = '#58a6ff';
+  summary.style.fontSize = '0.9em';
+  summary.style.marginBottom = '8px';
+  summary.style.fontWeight = '600';
+  
+  const container = document.createElement('div');
+  container.style.marginTop = '8px';
+  
+  sqlArray.forEach((item, idx) => {
+    const wrapper = document.createElement('div');
+    wrapper.style.marginBottom = '12px';
+    
+    const label = document.createElement('div');
+    label.textContent = `Tool: ${item.tool || 'unknown'}`;
+    label.style.fontSize = '0.8em';
+    label.style.color = '#6b7280';
+    label.style.marginBottom = '4px';
+    
+    const pre = document.createElement('pre');
+    pre.style.fontSize = '0.85em';
+    pre.style.color = '#c9d1d9';
+    pre.style.backgroundColor = '#0d1117';
+    pre.style.padding = '12px';
+    pre.style.borderRadius = '6px';
+    pre.style.borderLeft = '3px solid #58a6ff';
+    pre.style.overflowX = 'auto';
+    pre.textContent = item.sql || 'No SQL captured';
+    
+    wrapper.appendChild(label);
+    wrapper.appendChild(pre);
+    container.appendChild(wrapper);
+  });
+  
+  details.appendChild(summary);
+  details.appendChild(container);
+  parent.appendChild(details);
+}
+
 function addMessage(role, text){
   const div = document.createElement('div');
   div.className = `message ${role}`;
@@ -310,8 +387,22 @@ async function sendChat({ overrideMode = null, overrideViz = null } = {}){
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if (!data) throw new Error('Empty');
+    
     const msg = addMessage('assistant', data.answer || '');
+    
+    // Show SQL commands if available (above the answer for visibility)
+    if (data.sql && data.sql.length > 0) {
+      renderSQLCommands(msg, data.sql);
+    }
+    
+    // Show thinking process if available
+    if (data.thinking) {
+      renderThinkingProcess(msg, data.thinking);
+    }
+    
+    // Render visualization if available
     if (data.viz && data.data) renderVizBelow(msg, data.data, data.viz);
+    
     // success → decrement free uses
     setRemainingUses(getRemainingUses() - 1);
     updateUsesUI();
