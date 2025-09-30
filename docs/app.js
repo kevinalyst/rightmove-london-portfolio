@@ -605,6 +605,67 @@ async function sendChatStreaming({ overrideMode = null, overrideViz = null } = {
       if (data.table?.rows) {
         tableData = data.table.rows;
         console.log('[response.table] Received table data:', tableData.length, 'rows');
+        
+        // Render table immediately
+        const tableWrapper = document.createElement('div');
+        tableWrapper.className = 'viz';
+        tableWrapper.style.marginTop = '16px';
+        
+        const header = document.createElement('div');
+        header.className = 'viz-header';
+        header.innerHTML = '<strong>📋 Data Table</strong>';
+        tableWrapper.appendChild(header);
+        
+        renderTable(tableWrapper, tableData);
+        vizPlaceholder.appendChild(tableWrapper);
+      }
+    });
+    
+    // Listen for table data in response.tool_result events (Cortex Analyst results)
+    eventSource.addEventListener('response.tool_result', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        const content = data.content || [];
+        
+        for (const item of content) {
+          if (item.json?.result_set?.data) {
+            const resultSet = item.json.result_set;
+            const rawData = resultSet.data; // Array of arrays
+            const metaData = resultSet.resultSetMetaData;
+            const columns = metaData?.rowType || [];
+            
+            // Convert to object format expected by renderTable
+            const tableRows = rawData.map(row => {
+              const obj = {};
+              row.forEach((value, index) => {
+                const colName = columns[index]?.name || `col_${index}`;
+                obj[colName] = value;
+              });
+              return obj;
+            });
+            
+            console.log('[response.tool_result] Received SQL result table:', tableRows.length, 'rows');
+            console.log('[response.tool_result] Columns:', columns.map(c => c.name));
+            
+            // Render table immediately
+            const tableWrapper = document.createElement('div');
+            tableWrapper.className = 'viz';
+            tableWrapper.style.marginTop = '16px';
+            
+            const header = document.createElement('div');
+            header.className = 'viz-header';
+            header.innerHTML = '<strong>📋 Query Results</strong>';
+            tableWrapper.appendChild(header);
+            
+            renderTable(tableWrapper, tableRows);
+            vizPlaceholder.appendChild(tableWrapper);
+            
+            // Store for potential chart rendering
+            tableData = tableRows;
+          }
+        }
+      } catch (err) {
+        console.error('[response.tool_result] Parse error:', err);
       }
     });
     
