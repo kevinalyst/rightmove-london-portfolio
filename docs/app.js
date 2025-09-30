@@ -3,6 +3,9 @@ let state = State.idle;
 let configError = '';
 let config = { backend_base_url: typeof window !== 'undefined' ? (window.__BACKEND_BASE_URL || '') : '' };
 
+// Track active streaming connection for cancellation
+let activeEventSource = null;
+
 const STORAGE_KEY = 'demoFreeUses';
 const INITIAL_USES = 5;
 
@@ -78,9 +81,13 @@ function announceUses(){
 function setState(next){
   state = next;
   if (state === State.querying){
-    els.ask.disabled = true;
+    els.ask.textContent = 'Stop';
+    els.ask.className = 'stop';
+    els.ask.disabled = false; // Keep enabled for cancellation
     els.input.setAttribute('aria-busy','true');
   } else {
+    els.ask.textContent = 'Ask';
+    els.ask.className = '';
     els.input.removeAttribute('aria-busy');
     updateUsesUI();
   }
@@ -274,32 +281,38 @@ function renderTable(parent, rows){
   parent.appendChild(wrap);
 }
 
-// Render Vega-Lite chart spec (native Cortex Agent format)
+// Render Vega-Lite chart spec (native Cortex Agent format) - Responsive like Snowflake
 function renderVegaChart(container, vegaLiteSpec) {
   // Clear container
   container.innerHTML = '';
   
-  // Create wrapper for Vega chart
+  // Create responsive wrapper (matches Snowflake UI)
   const wrapper = document.createElement('div');
   wrapper.className = 'vega-chart-wrapper';
   wrapper.style.width = '100%';
-  wrapper.style.minHeight = '400px';
   wrapper.style.backgroundColor = '#0d1117';
-  wrapper.style.padding = '16px';
   wrapper.style.borderRadius = '8px';
   wrapper.style.border = '1px solid #1f2328';
+  wrapper.style.overflow = 'hidden';
   container.appendChild(wrapper);
   
-  // Configure Vega-Embed options for dark theme
-  const embedOptions = {
-    theme: 'dark',
-    actions: {
-      export: { svg: true, png: true },
-      source: false,
-      compiled: false,
-      editor: false
+  // Make chart responsive like Snowflake
+  const dataLength = vegaLiteSpec.data?.values?.length || 0;
+  const responsiveSpec = {
+    ...vegaLiteSpec,
+    width: "container",  // Fill container width
+    height: Math.max(300, Math.min(500, dataLength * 35 + 100)), // Dynamic height
+    autosize: {
+      type: "fit-x",     // Fit width, maintain aspect
+      contains: "padding"
     },
     config: {
+      ...vegaLiteSpec.config,
+      view: {
+        continuousWidth: 300,
+        continuousHeight: 300,
+        stroke: "transparent" // Remove default border
+      },
       background: '#0d1117',
       axis: {
         domainColor: '#2d333b',
@@ -313,20 +326,38 @@ function renderVegaChart(container, vegaLiteSpec) {
         titleColor: '#e6edf3'
       },
       title: {
-        color: '#e6edf3'
+        color: '#e6edf3',
+        fontSize: 14,
+        anchor: 'start'
       }
     }
   };
   
-  // Render Vega-Lite chart
+  // Configure Vega-Embed for Snowflake-like experience
+  const embedOptions = {
+    theme: 'dark',
+    actions: {
+      export: { svg: true, png: true },
+      source: false,
+      compiled: false,
+      editor: false
+    },
+    config: {
+      background: '#0d1117'
+    },
+    padding: { top: 20, right: 20, bottom: 40, left: 60 }
+  };
+  
+  // Render responsive Vega-Lite chart
   // eslint-disable-next-line no-undef
-  vegaEmbed(wrapper, vegaLiteSpec, embedOptions)
+  vegaEmbed(wrapper, responsiveSpec, embedOptions)
     .then(result => {
-      console.log('[Vega] Chart rendered successfully');
+      console.log('[Vega] Responsive chart rendered successfully');
+      console.log('[Vega] Chart dimensions:', result.view.width(), 'x', result.view.height());
     })
     .catch(error => {
       console.error('[Vega] Rendering error:', error);
-      wrapper.innerHTML = '<p style="color: #ff6b6b;">Chart rendering failed. See console for details.</p>';
+      wrapper.innerHTML = '<p style="color: #ff6b6b; padding: 20px;">Chart rendering failed. See console for details.</p>';
     });
 }
 
@@ -491,6 +522,7 @@ async function sendChatStreaming({ overrideMode = null, overrideViz = null } = {
   
   try {
     const eventSource = new EventSource(streamUrl);
+    activeEventSource = eventSource; // Track for cancellation
     
     eventSource.addEventListener('response.status', (e) => {
       const data = JSON.parse(e.data);
@@ -602,6 +634,7 @@ async function sendChatStreaming({ overrideMode = null, overrideViz = null } = {
       // This ensures charts appear as soon as agent generates them
       
       eventSource.close();
+      activeEventSource = null; // Clear tracking
       setState(State.idle);
       setRemainingUses(getRemainingUses() - 1);
       updateUsesUI();
@@ -611,6 +644,9 @@ async function sendChatStreaming({ overrideMode = null, overrideViz = null } = {
     eventSource.addEventListener('error', (e) => {
       console.error('SSE error:', e);
       eventSource.close();
+      if (activeEventSource === eventSource) {
+        activeEventSource = null; // Clear tracking
+      }
       if (msg && !answerText) {
         answerDiv.textContent = 'Service error. Please try again.';
         answerDiv.style.display = 'block';
@@ -620,6 +656,9 @@ async function sendChatStreaming({ overrideMode = null, overrideViz = null } = {
     
     eventSource.addEventListener('done', (e) => {
       eventSource.close();
+      if (activeEventSource === eventSource) {
+        activeEventSource = null;
+      }
     });
     
   } catch(err){
@@ -723,7 +762,21 @@ window.addEventListener('DOMContentLoaded', async () => {
     announceUses();
   }
 
-  els.ask.addEventListener('click', () => sendChat());
+  // Ask/Stop toggle handler
+  els.ask.addEventListener('click', () => {
+    if (state === State.querying) {
+      // Stop current query
+      console.log('[UI] User clicked Stop - cancelling active request');
+      if (activeEventSource) {
+        activeEventSource.close();
+        activeEventSource = null;
+      }
+      setState(State.idle);
+    } else {
+      // Start new query
+      sendChat();
+    }
+  });
   els.input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey){
       e.preventDefault();

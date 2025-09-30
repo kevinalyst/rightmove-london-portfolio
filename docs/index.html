@@ -32,10 +32,10 @@
           <div class="kicker">Explore the data with Snowflake Cortex</div>
           <p class="lede">Ask questions about transformed Rightmove listings using two modes: Analyst for structured SQL-style analysis over 28k+ estates on Rightmove, and Search for unstructured mining across listing descriptions and docs.</p>
           <div class="pills-row" id="pills-row">
-            <button class="pill" data-mode="analyst" data-viz="bar"><span class="pill-ic" aria-hidden="true">A</span><span class="pill-label">Average price by borough</span></button>
-            <button class="pill" data-mode="analyst" data-viz="line"><span class="pill-ic" aria-hidden="true">A</span><span class="pill-label">Monthly avg price trend (12m)</span></button>
-            <button class="pill" data-mode="search" data-viz="table"><span class="pill-ic" aria-hidden="true">S</span><span class="pill-label">Listings mentioning “garden” or “balcony”</span></button>
-            <button class="pill" data-mode="search" data-viz="bar"><span class="pill-ic" aria-hidden="true">S</span><span class="pill-label">Top amenities keywords in descriptions</span></button>
+            <button class="pill" data-mode="analyst" data-viz="bar">Average price by borough</button>
+            <button class="pill" data-mode="analyst" data-viz="line">Monthly avg price trend (12m)</button>
+            <button class="pill" data-mode="search" data-viz="table">Listings mentioning "garden" or "balcony"</button>
+            <button class="pill" data-mode="search" data-viz="bar">Top amenities keywords in descriptions</button>
           </div>
         </div>
 
@@ -44,9 +44,9 @@
           <div class="composer">
             <textarea id="input" rows="3" placeholder="Ask anything about prices, types, or trends… (Enter to send, Shift+Enter for newline)"></textarea>
             <div class="actions">
+              <button id="reset" class="secondary">Reset</button>
               <button id="ask">Ask</button>
               <span class="uses" id="uses-badge" title=""><span id="uses-count">5</span>/5</span>
-              <button id="reset" class="secondary">Reset</button>
             </div>
           </div>
         </div>
