@@ -274,67 +274,60 @@ function renderTable(parent, rows){
   parent.appendChild(wrap);
 }
 
-function buildChartDatasetFromSpec(data, spec){
-  const xKey = spec.x;
-  const yKey = spec.y;
-  const labels = [];
-  const values = [];
-  for (const row of (data || [])){
-    labels.push(row?.[xKey]);
-    values.push(Number(row?.[yKey] ?? 0));
-  }
-  return { labels, datasets: [{ label: yKey || 'value', data: values }] };
-}
-
-function computeHistogram(data, spec){
-  const xKey = spec.x;
-  const nums = (data || []).map(r => Number(r?.[xKey])).filter(n => Number.isFinite(n));
-  if (nums.length === 0){
-    return { labels: [], datasets: [{ label: 'count', data: [] }] };
-  }
-  const bins = Math.max(1, Number(spec.bins) || 10);
-  const min = Math.min(...nums);
-  const max = Math.max(...nums);
-  const width = (max - min) / bins || 1;
-  const edges = Array.from({length: bins}, (_, i) => min + i * width);
-  const counts = new Array(bins).fill(0);
-  for (const v of nums){
-    let idx = Math.floor((v - min) / width);
-    if (idx >= bins) idx = bins - 1;
-    if (idx < 0) idx = 0;
-    counts[idx]++;
-  }
-  const labels = edges.map((e, i) => `${Math.round(e).toLocaleString()}–${Math.round(e + width).toLocaleString()}`);
-  return { labels, datasets: [{ label: 'count', data: counts }] };
-}
-
-function renderChart(parent, data, viz){
-  const canvas = document.createElement('canvas');
-  parent.appendChild(canvas);
-  let cfgData;
-  if (viz.type === 'histogram'){
-    cfgData = computeHistogram(data, viz);
-  } else {
-    cfgData = buildChartDatasetFromSpec(data, viz);
-  }
-  const type = viz.type === 'histogram' ? 'bar' : viz.type;
-  // eslint-disable-next-line no-undef
-  new Chart(canvas.getContext('2d'), {
-    type,
-    data: cfgData,
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { labels: { color: '#e6edf3' } },
-        tooltip: { intersect: false, mode: 'index' },
+// Render Vega-Lite chart spec (native Cortex Agent format)
+function renderVegaChart(container, vegaLiteSpec) {
+  // Clear container
+  container.innerHTML = '';
+  
+  // Create wrapper for Vega chart
+  const wrapper = document.createElement('div');
+  wrapper.className = 'vega-chart-wrapper';
+  wrapper.style.width = '100%';
+  wrapper.style.minHeight = '400px';
+  wrapper.style.backgroundColor = '#0d1117';
+  wrapper.style.padding = '16px';
+  wrapper.style.borderRadius = '8px';
+  wrapper.style.border = '1px solid #1f2328';
+  container.appendChild(wrapper);
+  
+  // Configure Vega-Embed options for dark theme
+  const embedOptions = {
+    theme: 'dark',
+    actions: {
+      export: { svg: true, png: true },
+      source: false,
+      compiled: false,
+      editor: false
+    },
+    config: {
+      background: '#0d1117',
+      axis: {
+        domainColor: '#2d333b',
+        gridColor: '#1f2328',
+        tickColor: '#2d333b',
+        labelColor: '#9da7b3',
+        titleColor: '#e6edf3'
       },
-      scales: {
-        x: { ticks: { color: '#9da7b3' }, grid: { color: '#1f2328' } },
-        y: { ticks: { color: '#9da7b3' }, grid: { color: '#1f2328' } }
+      legend: {
+        labelColor: '#9da7b3',
+        titleColor: '#e6edf3'
+      },
+      title: {
+        color: '#e6edf3'
       }
     }
-  });
+  };
+  
+  // Render Vega-Lite chart
+  // eslint-disable-next-line no-undef
+  vegaEmbed(wrapper, vegaLiteSpec, embedOptions)
+    .then(result => {
+      console.log('[Vega] Chart rendered successfully');
+    })
+    .catch(error => {
+      console.error('[Vega] Rendering error:', error);
+      wrapper.innerHTML = '<p style="color: #ff6b6b;">Chart rendering failed. See console for details.</p>';
+    });
 }
 
 function attachCopyCSV(btn, source){
@@ -347,105 +340,36 @@ function attachCopyCSV(btn, source){
   });
 }
 
-function renderVizBelow(messageEl, data, viz){
-  if (!viz || !data) return;
+// Render Vega-Lite visualization from Cortex Agent chart spec
+function renderVizBelow(messageEl, vegaSpec){
+  if (!vegaSpec) return;
+  
   const wrap = document.createElement('div');
   wrap.className = 'viz';
+  wrap.style.marginTop = '16px';
+  
   const header = document.createElement('div');
   header.className = 'viz-header';
+  header.style.display = 'flex';
+  header.style.justifyContent = 'space-between';
+  header.style.alignItems = 'center';
+  header.style.marginBottom = '12px';
+  
   const title = document.createElement('strong');
-  title.textContent = viz.type === 'table' ? 'Table' : viz.type.toUpperCase();
-  const copy = document.createElement('button');
-  copy.className = 'copy-btn';
-  copy.type = 'button';
-  copy.textContent = 'Copy CSV';
+  title.textContent = vegaSpec.title || '📊 Visualization';
+  title.style.color = '#58a6ff';
+  title.style.fontSize = '1.1em';
+  
   header.appendChild(title);
-  header.appendChild(copy);
   wrap.appendChild(header);
 
-  if (viz.type === 'table'){
-    renderTable(wrap, data);
-    attachCopyCSV(copy, () => toCSVFromRows(data));
-  } else if (['bar','line','pie','histogram'].includes(viz.type)){
-    const csv = () => {
-      if (viz.type === 'histogram'){
-        const agg = computeHistogram(data, viz);
-        const rows = agg.labels.map((label, i) => ({ bin: label, count: agg.datasets[0].data[i] || 0 }));
-        return toCSVFromRows(rows);
-      }
-      const agg = buildChartDatasetFromSpec(data, viz);
-      const rows = agg.labels.map((label, i) => ({ [viz.x || 'x']: label, [viz.y || 'y']: agg.datasets[0].data[i] || 0 }));
-      return toCSVFromRows(rows);
-    };
-    renderChart(wrap, data, viz);
-    wrap.style.height = '280px';
-    attachCopyCSV(copy, csv);
-  }
+  // Render the Vega-Lite chart
+  renderVegaChart(wrap, vegaSpec);
 
   messageEl.appendChild(wrap);
 }
 
-// Infer visualization spec from response data and answer text
-function inferVizFromResponse(answerText, data) {
-  if (!data || !Array.isArray(data) || data.length === 0) return null;
-  
-  const firstRow = data[0];
-  const columns = Object.keys(firstRow);
-  
-  // Need at least 2 columns for meaningful viz
-  if (columns.length < 2) return null;
-  
-  const lowerAnswer = (answerText || '').toLowerCase();
-  
-  // Detect if this should have a visualization
-  const hasGrouping = lowerAnswer.includes('by borough') || 
-                      lowerAnswer.includes('by zone') ||
-                      lowerAnswer.includes('by property type') ||
-                      lowerAnswer.includes('by type') ||
-                      lowerAnswer.includes('across') ||
-                      lowerAnswer.includes('comparison') ||
-                      lowerAnswer.includes('distribution') ||
-                      columns.some(c => c.toLowerCase().includes('zone') || c.toLowerCase().includes('borough'));
-  
-  if (!hasGrouping) return null;
-  
-  // Find likely X axis (categorical column)
-  const xColumn = columns.find(c => {
-    const lower = c.toLowerCase();
-    return lower.includes('zone') ||
-           lower.includes('borough') ||
-           lower.includes('type') ||
-           lower.includes('name') ||
-           lower.includes('category');
-  }) || columns[0]; // Fallback to first column
-  
-  // Find likely Y axis (numeric column with meaningful name)
-  const yColumn = columns.find(c => {
-    const lower = c.toLowerCase();
-    return lower.includes('price') ||
-           lower.includes('count') ||
-           lower.includes('avg') ||
-           lower.includes('average') ||
-           lower.includes('total') ||
-           lower.includes('median') ||
-           lower.includes('sum');
-  }) || columns.find(c => c !== xColumn && typeof firstRow[c] === 'number') || columns[1];
-  
-  // Determine chart type
-  let vizType = 'bar';
-  if (lowerAnswer.includes('trend') || lowerAnswer.includes('over time') || lowerAnswer.includes('monthly')) {
-    vizType = 'line';
-  } else if (lowerAnswer.includes('distribution') || lowerAnswer.includes('histogram')) {
-    vizType = 'histogram';
-  }
-  
-  if (xColumn && yColumn && xColumn !== yColumn) {
-    console.log(`[inferViz] Detected viz: ${vizType} chart with x=${xColumn}, y=${yColumn}`);
-    return { type: vizType, x: xColumn, y: yColumn };
-  }
-  
-  return null;
-}
+// Note: Removed inferVizFromResponse - Cortex Agent sends Vega-Lite specs directly via response.chart event
 
 // Default mode for manual questions when no pill is used
 function currentMode(){ return 'analyst'; }
@@ -642,18 +566,8 @@ async function sendChatStreaming({ overrideMode = null, overrideViz = null } = {
       thinkingSection.open = false;
       thinkingSummary.textContent = '🤔 Thinking Process (click to expand)';
       
-      // Auto-detect and render visualization
-      if (tableData) {
-        // Use explicit viz if provided from pill click
-        const vizSpec = viz || inferVizFromResponse(answerText, tableData);
-        
-        if (vizSpec) {
-          console.log('[viz] Rendering with spec:', vizSpec);
-          renderVizBelow(vizPlaceholder, tableData, vizSpec);
-        } else {
-          console.log('[viz] No viz spec inferred for data');
-        }
-      }
+      // Note: Charts are rendered via response.chart event (not here)
+      // This ensures charts appear as soon as agent generates them
       
       eventSource.close();
       setState(State.idle);
@@ -728,8 +642,7 @@ async function sendChat({ overrideMode = null, overrideViz = null } = {}){
     
     const msg = addMessage('assistant', data.answer || '');
     
-    // Render visualization if available
-    if (data.viz && data.data) renderVizBelow(msg, data.data, data.viz);
+    // Note: Search mode doesn't support charts via Cortex (text-only results)
     
     // success → decrement free uses
     setRemainingUses(getRemainingUses() - 1);
