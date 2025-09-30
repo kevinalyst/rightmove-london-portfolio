@@ -853,15 +853,22 @@ function resetTranscript(){
 function handlePrepopClick(e){
   const btn = e.target.closest('.pill');
   if (!btn) return;
-  const question = btn.textContent.trim();
+  
+  // Get full prompt from data-prompt attribute (if available) or fallback to button text
+  const fullPrompt = btn.getAttribute('data-prompt') || btn.textContent.trim();
   const mode = btn.getAttribute('data-mode');
   const viz = btn.getAttribute('data-viz');
-  els.input.value = question;
+  
+  // Populate textarea with full prompt for user to edit/send
+  els.input.value = fullPrompt;
+  els.input.focus(); // Focus for immediate editing
+  
   // brief active style
   btn.classList.add('active');
   setTimeout(() => btn.classList.remove('active'), 900);
-  // Auto-send
-  sendChat({ overrideMode: mode, overrideViz: viz });
+  
+  // Note: Don't auto-send - let user review and edit the prompt
+  console.log('[pill] Populated prompt:', fullPrompt.substring(0, 100) + '...');
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
