@@ -118,9 +118,12 @@ function renderThinkingProcess(parent, thinking){
 function renderSQLCommands(parent, sqlArray){
   if (!sqlArray || sqlArray.length === 0) return;
   
+  // Clear existing content for progressive updates
+  parent.innerHTML = '';
+  
   const details = document.createElement('details');
   details.className = 'sql-details';
-  details.open = true; // Expanded by default to show queries
+  details.open = false; // Collapsed by default after answer shown
   
   const summary = document.createElement('summary');
   summary.textContent = `⚡ Cortex Analyst Queries (${sqlArray.length})`;
@@ -385,7 +388,61 @@ function renderVizBelow(messageEl, data, viz){
 // Default mode for manual questions when no pill is used
 function currentMode(){ return 'analyst'; }
 
-async function sendChat({ overrideMode = null, overrideViz = null } = {}){
+// Create streaming message container with live sections
+function createStreamingMessage(){
+  const msg = document.createElement('div');
+  msg.className = 'message assistant';
+  
+  const badge = document.createElement('span');
+  badge.className = 'role-badge';
+  badge.textContent = 'Assistant';
+  msg.appendChild(badge);
+  
+  // Create sections in order: thinking → answer → SQL
+  const thinkingSection = document.createElement('details');
+  thinkingSection.className = 'thinking-live';
+  thinkingSection.open = true;  // Expanded during streaming
+  thinkingSection.style.marginBottom = '16px';
+  
+  const thinkingSummary = document.createElement('summary');
+  thinkingSummary.textContent = '🤔 Thinking...';
+  thinkingSummary.style.cursor = 'pointer';
+  thinkingSummary.style.color = '#58a6ff';
+  thinkingSummary.style.fontSize = '0.9em';
+  thinkingSummary.style.fontWeight = '600';
+  
+  const thinkingContent = document.createElement('div');
+  thinkingContent.className = 'thinking-content';
+  thinkingContent.style.fontSize = '0.85em';
+  thinkingContent.style.color = '#9da7b3';
+  thinkingContent.style.backgroundColor = '#161b22';
+  thinkingContent.style.padding = '12px';
+  thinkingContent.style.borderRadius = '6px';
+  thinkingContent.style.marginTop = '8px';
+  thinkingContent.style.whiteSpace = 'pre-wrap';
+  thinkingContent.style.fontFamily = 'monospace';
+  
+  thinkingSection.appendChild(thinkingSummary);
+  thinkingSection.appendChild(thinkingContent);
+  msg.appendChild(thinkingSection);
+  
+  const answerDiv = document.createElement('div');
+  answerDiv.className = 'message-text';
+  answerDiv.style.display = 'none';  // Hidden until answer arrives
+  msg.appendChild(answerDiv);
+  
+  const sqlSection = document.createElement('div');
+  sqlSection.className = 'sql-section';
+  sqlSection.style.display = 'none';  // Hidden until SQL arrives
+  msg.appendChild(sqlSection);
+  
+  els.messages.appendChild(msg);
+  els.messages.scrollTop = els.messages.scrollHeight;
+  
+  return { msg, thinkingSection, thinkingSummary, thinkingContent, answerDiv, sqlSection };
+}
+
+async function sendChatStreaming({ overrideMode = null, overrideViz = null } = {}){
   const text = els.input.value.trim();
   if (!text) return;
   if (getRemainingUses() <= 0){
@@ -394,11 +451,158 @@ async function sendChat({ overrideMode = null, overrideViz = null } = {}){
   }
   if (!config.backend_base_url){
     setState(State.error);
-    addMessage('assistant', 'Setup incomplete: backend URL not configured. Please redeploy the site with docs/config.json or inline backend_base_url.');
+    addMessage('assistant', 'Setup incomplete: backend URL not configured.');
     return;
   }
   const mode = overrideMode || currentMode();
-  const viz = overrideViz; // may be null
+  const viz = overrideViz;
+
+  addMessage('user', text);
+  els.input.value='';
+  setState(State.querying);
+
+  const { msg, thinkingSection, thinkingSummary, thinkingContent, answerDiv, sqlSection } = createStreamingMessage();
+  
+  const streamUrl = joinUrl(config.backend_base_url, `/api/chat/stream?question=${encodeURIComponent(text)}&mode=${mode}`);
+  
+  let thinkingText = '';
+  let statusText = '';
+  let answerText = '';
+  let sqlQueries = [];
+  let finalData = null;
+  
+  try {
+    const eventSource = new EventSource(streamUrl);
+    
+    eventSource.addEventListener('response.status', (e) => {
+      const data = JSON.parse(e.data);
+      statusText = `[${data.status}] ${data.message}`;
+      thinkingContent.textContent = statusText + '\n\n' + thinkingText;
+      els.messages.scrollTop = els.messages.scrollHeight;
+    });
+    
+    eventSource.addEventListener('response.thinking.delta', (e) => {
+      const data = JSON.parse(e.data);
+      thinkingText += data.text || '';
+      thinkingContent.textContent = statusText + '\n\n' + thinkingText;
+      els.messages.scrollTop = els.messages.scrollHeight;
+    });
+    
+    eventSource.addEventListener('execution_trace', (e) => {
+      const traces = JSON.parse(e.data);
+      if (!Array.isArray(traces)) return;
+      
+      for (const traceStr of traces) {
+        try {
+          const trace = JSON.parse(traceStr);
+          const attrs = trace.attributes || [];
+          
+          const sqlAttr = attrs.find(a => a.key === 'snow.ai.observability.agent.tool.cortex_analyst.sql_query');
+          if (sqlAttr?.value?.stringValue) {
+            const sql = sqlAttr.value.stringValue;
+            if (!sqlQueries.find(q => q.sql === sql)) {
+              sqlQueries.push({
+                tool: 'Cortex Analyst',
+                sql: sql
+              });
+              // Show SQL immediately
+              sqlSection.style.display = 'block';
+              renderSQLCommands(sqlSection, sqlQueries);
+            }
+          }
+        } catch (err) {
+          console.error('trace parse error:', err);
+        }
+      }
+    });
+    
+    eventSource.addEventListener('response.text.delta', (e) => {
+      const data = JSON.parse(e.data);
+      answerText += data.text || '';
+      answerDiv.textContent = answerText;
+      answerDiv.style.display = 'block';
+      els.messages.scrollTop = els.messages.scrollHeight;
+    });
+    
+    eventSource.addEventListener('response', (e) => {
+      const data = JSON.parse(e.data);
+      const content = data.content || [];
+      
+      // Extract final answer if not already shown
+      if (!answerText) {
+        for (const item of content) {
+          if (item.type === 'text') {
+            answerText += item.text || '';
+          } else if (item.type === 'table' && item.table?.rows) {
+            finalData = { rows: item.table.rows, columns: item.table.columns };
+          }
+        }
+        answerDiv.textContent = answerText;
+        answerDiv.style.display = 'block';
+      }
+      
+      // Auto-collapse thinking
+      thinkingSection.open = false;
+      thinkingSummary.textContent = '🤔 Thinking Process (click to expand)';
+      
+      // Render viz if we have data and viz spec
+      if (finalData && viz) {
+        renderVizBelow(msg, finalData.rows, viz);
+      }
+      
+      eventSource.close();
+      setState(State.idle);
+      setRemainingUses(getRemainingUses() - 1);
+      updateUsesUI();
+      announceUses();
+    });
+    
+    eventSource.addEventListener('error', (e) => {
+      console.error('SSE error:', e);
+      eventSource.close();
+      if (msg && !answerText) {
+        answerDiv.textContent = 'Service error. Please try again.';
+        answerDiv.style.display = 'block';
+      }
+      setState(State.error);
+    });
+    
+    eventSource.addEventListener('done', (e) => {
+      eventSource.close();
+    });
+    
+  } catch(err){
+    console.error(err);
+    if (msg) {
+      answerDiv.textContent = 'Service error. Try again.';
+      answerDiv.style.display = 'block';
+    }
+    setState(State.error);
+  }
+}
+
+// Wrapper function to choose between streaming (analyst) and batch (search)
+async function sendChat({ overrideMode = null, overrideViz = null } = {}){
+  const mode = overrideMode || currentMode();
+  
+  // Use streaming for analyst mode, batch for search mode
+  if (mode === 'analyst') {
+    return sendChatStreaming({ overrideMode, overrideViz });
+  }
+  
+  // Original batch mode for search
+  const text = els.input.value.trim();
+  if (!text) return;
+  if (getRemainingUses() <= 0){
+    updateUsesUI();
+    return;
+  }
+  if (!config.backend_base_url){
+    setState(State.error);
+    addMessage('assistant', 'Setup incomplete: backend URL not configured.');
+    return;
+  }
+  const viz = overrideViz;
 
   addMessage('user', text);
   els.input.value='';
@@ -418,16 +622,6 @@ async function sendChat({ overrideMode = null, overrideViz = null } = {}){
     if (!data) throw new Error('Empty');
     
     const msg = addMessage('assistant', data.answer || '');
-    
-    // Show SQL commands if available (above the answer for visibility)
-    if (data.sql && data.sql.length > 0) {
-      renderSQLCommands(msg, data.sql);
-    }
-    
-    // Show thinking process if available
-    if (data.thinking) {
-      renderThinkingProcess(msg, data.thinking);
-    }
     
     // Render visualization if available
     if (data.viz && data.data) renderVizBelow(msg, data.data, data.viz);

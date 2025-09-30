@@ -114,39 +114,38 @@ function parseAgentResponse(agentPayload){
         thinkingSteps.push(`\n[${evt.data.status}] ${evt.data.message}\n`);
       }
       
-      // Capture execution traces which contain SQL
-      if (evt.event === 'execution_trace' && evt.data) {
-        const trace = evt.data;
-        
-        // Log full trace for analysis
-        console.log(`[execution_trace] Full:`, JSON.stringify(trace));
-        
-        // The actual generated SQL is in trace.output.sql for text2sql tools
-        if (trace.output?.sql) {
-          sqlCommands.push({
-            tool: trace.tool_name || 'analyst',
-            type: 'generated',
-            sql: trace.output.sql
-          });
-        }
-        
-        // Execution results may also have SQL
-        if (trace.output?.result?.sql) {
-          sqlCommands.push({
-            tool: trace.tool_name || 'analyst',
-            type: 'executed',
-            sql: trace.output.result.sql
-          });
-        }
-        
-        // Input query (natural language for context)
-        if (trace.input?.query && !trace.output?.sql) {
-          // Only include if we don't have actual SQL yet
-          sqlCommands.push({
-            tool: trace.tool_name || 'analyst',
-            type: 'query',
-            sql: trace.input.query
-          });
+      // Capture execution traces which contain the ACTUAL SQL
+      if (evt.event === 'execution_trace' && Array.isArray(evt.data)) {
+        // execution_trace contains array of trace objects with attributes
+        for (const traceStr of evt.data) {
+          try {
+            const trace = JSON.parse(traceStr);
+            const attrs = trace.attributes || [];
+            
+            // Find the SQL query attribute
+            const sqlAttr = attrs.find(a => a.key === 'snow.ai.observability.agent.tool.cortex_analyst.sql_query');
+            if (sqlAttr?.value?.stringValue) {
+              const toolName = attrs.find(a => a.key === 'snow.ai.observability.agent.tool.cortex_analyst.semantic_model')?.value?.stringValue || 'analyst';
+              
+              sqlCommands.push({
+                tool: toolName.split('/').pop() || 'analyst',
+                type: 'executed',
+                sql: sqlAttr.value.stringValue
+              });
+            }
+            
+            // Also check for SQL execution query
+            const execSQLAttr = attrs.find(a => a.key === 'snow.ai.observability.agent.tool.sql_execution.query');
+            if (execSQLAttr?.value?.stringValue) {
+              sqlCommands.push({
+                tool: 'sql_executor',
+                type: 'executed',
+                sql: execSQLAttr.value.stringValue
+              });
+            }
+          } catch (e) {
+            console.error('[execution_trace] Parse error:', e);
+          }
         }
       }
       
@@ -451,6 +450,9 @@ async function callCortexAgent(env, prompt, mode = 'analyst'){
     const responseText = await res.text();
     console.log(`[callCortexAgent] Response preview: ${responseText.substring(0, 200)}...`);
     
+    // Log full SSE stream for investigation (first 5000 chars)
+    console.log('[SSE INVESTIGATION] Full stream:', responseText.substring(0, 5000));
+    
     return parseAgentResponse(responseText);
   } catch (error) {
     clearTimeout(timeout);
@@ -569,6 +571,74 @@ async function health(env, request) {
   }
 }
 
+async function chatStream(env, request) {
+  const url = new URL(request.url);
+  const question = url.searchParams.get('question') || url.searchParams.get('q');
+  const mode = url.searchParams.get('mode') || 'analyst';
+  
+  if (!question) {
+    return new Response('Missing question parameter', { status: 400 });
+  }
+  
+  const correlationId = crypto.randomUUID();
+  console.log(`[${correlationId}] Starting streaming ${mode} request for: ${question.substring(0, 100)}...`);
+  
+  try {
+    const account = requiredString(env.SNOWFLAKE_ACCOUNT, 'SNOWFLAKE_ACCOUNT');
+    const host = account.includes('.') ? account : `${account}.snowflakecomputing.com`;
+    const database = env.SNOWFLAKE_AGENT_DATABASE || 'SNOWFLAKE_INTELLIGENCE';
+    const schema = env.SNOWFLAKE_AGENT_SCHEMA || 'AGENTS';
+    const agentName = env.SNOWFLAKE_AGENT_NAME || 'RIGHTMOVE_ANALYSIS';
+    const token = requiredString(env.SNOWFLAKE_PAT_TOKEN, 'SNOWFLAKE_PAT_TOKEN');
+    
+    const agentUrl = `https://${host}/api/v2/databases/${encodeURIComponent(database)}/schemas/${encodeURIComponent(schema)}/agents/${encodeURIComponent(agentName)}:run`;
+    
+    const body = {
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: question }]
+        }
+      ]
+    };
+    
+    const headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',  // Request SSE stream
+      'Authorization': `Bearer ${token}`,
+      'User-Agent': 'london-portfolio-worker/1.1-streaming'
+    };
+    
+    // Fetch Snowflake SSE stream
+    const sfResponse = await fetch(agentUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    });
+    
+    if (!sfResponse.ok) {
+      const errorText = await sfResponse.text();
+      console.error(`[${correlationId}] Snowflake error: ${sfResponse.status} ${errorText}`);
+      return new Response(`Error: ${sfResponse.status}`, { status: sfResponse.status });
+    }
+    
+    // Return SSE stream with CORS headers
+    return new Response(sfResponse.body, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',  // Disable nginx buffering
+        ...corsHeaders(env, request)
+      }
+    });
+    
+  } catch (error) {
+    console.error(`[${correlationId}] Stream error:`, error);
+    return new Response(`Error: ${error.message}`, { status: 500, headers: corsHeaders(env, request) });
+  }
+}
+
 export default {
   async fetch(request, env){
     const url = new URL(request.url);
@@ -584,7 +654,12 @@ export default {
       return health(env, request);
     }
     
-    // Chat endpoint
+    // Streaming chat endpoint (NEW)
+    if (request.method === 'GET' && p === '/api/chat/stream') {
+      return chatStream(env, request);
+    }
+    
+    // Chat endpoint (legacy batch mode)
     if (request.method === 'POST' && p === '/api/chat') {
       return chat(env, request);
     }
