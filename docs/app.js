@@ -465,6 +465,13 @@ async function sendChatStreaming({ overrideMode = null, overrideViz = null } = {
     addMessage('assistant', 'Setup incomplete: backend URL not configured.');
     return;
   }
+  
+  // Safety check: Verify Vega-Lite library loaded
+  if (typeof vegaEmbed === 'undefined') {
+    console.error('[Chart] Vega-Lite library not loaded! Charts will not render.');
+    console.error('[Chart] Check if CDN scripts loaded successfully.');
+  }
+  
   const mode = overrideMode || currentMode();
   const viz = overrideViz;
 
@@ -533,6 +540,31 @@ async function sendChatStreaming({ overrideMode = null, overrideViz = null } = {
       answerDiv.textContent = answerText;
       answerDiv.style.display = 'block';
       els.messages.scrollTop = els.messages.scrollHeight;
+    });
+    
+    // Listen for Vega-Lite charts from Cortex Agent
+    eventSource.addEventListener('response.chart', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        console.log('[response.chart] Event received, content_index:', data.content_index);
+        
+        if (!data.chart_spec) {
+          console.warn('[response.chart] No chart_spec in event data');
+          return;
+        }
+        
+        const vegaSpec = JSON.parse(data.chart_spec);
+        console.log('[response.chart] Rendering Vega chart:', vegaSpec.title || 'Untitled');
+        console.log('[response.chart] Chart type:', vegaSpec.mark);
+        console.log('[response.chart] Data points:', vegaSpec.data?.values?.length || 0);
+        
+        // Render chart immediately in vizPlaceholder
+        renderVizBelow(vizPlaceholder, vegaSpec);
+        
+      } catch (err) {
+        console.error('[response.chart] Parse/render error:', err);
+        console.error('[response.chart] Event data preview:', e.data?.substring(0, 200));
+      }
     });
     
     // Listen for table data in response.table event
