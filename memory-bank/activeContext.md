@@ -1,30 +1,46 @@
 Active Context
 
 Current focus
-- Portfolio-ready guided flows A/B/C with zero external creds; minimal repo footprint.
-- Keep Pages chatbot reliably wired to Worker after demo-only backend change.
+- Production chatbot with live streaming Cortex Agent integration matching Snowflake UI experience.
+- Full reliability: 503 errors resolved, SSE streaming operational, native Vega-Lite charts rendering.
 
 Repo state
-- New repo created and pushed: `rightmove-london-portfolio` (remote `portfolio`).
-- CI workflows added, docs site configured, Makefile targets available.
+- Repo: `rightmove-london-portfolio` (remote `portfolio`, GitHub auto-redirects to `kevinalyst/rightmove-london-portfolio`).
+- Live site: `https://london-property-analysis.uk/` (Cloudflare Pages).
+- Worker: `https://london-portfolio-backend.axiuluo40.workers.dev` (account: `bd3a78c20e61142b0cbec2c465e0af83`).
+- Snowflake: Account `ZSVBFIR-AJ21181`, agent `SNOWFLAKE_INTELLIGENCE.AGENTS.RIGHTMOVE_ANALYSIS`.
 
-Recent changes
-- Makefile trimmed to two targets: `scrape10` (uses `rightmove_scraper.cli`) and `transform10` (local, no Snowflake).
-- Added `pipeline/local_rightmove_transform.py`: builds LOCATION, computes ZONE, reverse-geocodes ADDRESS via geopy.
-- Built `/docs` static mini chatbot (dark UI) and wiring guide; backend stubs under `/backend` (Cloudflare Worker).
-- Removed dummy `scraper/` CLI/stubs; added .gitignore to exclude secrets, outputs, and unneeded code.
-- Deployed Cloudflare Worker: `london-portfolio-backend` with permissive CORS support for Pages preview subdomains and production `london-property-analysis.uk` domain.
-- Pages project serves `/docs` and points frontend to Worker `backend_base_url`.
-- Worker now accepts `{question|query}` payloads; inline backend URL injected in `index.html` to avoid missing `config.json`.
-- Snowflake Cortex wired via `RIGHTMOVE_ANALYSIS`; Worker calls Cortex Agents REST API using Programmatic Access Token with `Authorization: Snowflake <token>` and `X-Snowflake-Authorization-Token-Type: PROGRAMMATIC_ACCESS_TOKEN`, requires fully qualified `SNOWFLAKE_ACCOUNT` host (e.g. `…eu-west2.gcp.snowflakecomputing.com`).
+Recent changes (Sept 30, 2025)
+- **MAJOR FIX**: Resolved HTTP 503 errors (4 root causes identified):
+  1. Account mismatch: Changed `SNOWFLAKE_ACCOUNT` from KA89655 to ZSVBFIR-AJ21181 (526→404).
+  2. Endpoint fix: Corrected to `.../agents/{name}:run` with :run suffix (404→200).
+  3. SSE parsing: Added stream parser for `event: response.*` format.
+  4. Search endpoint: Updated to `.../cortex-search-services/{name}:query` (v2, no columns param).
+- **Authentication**: Bearer PAT token, no `X-Snowflake-Authorization-Token-Type` header needed (auto-detect works).
+- **STREAMING**: Implemented live SSE passthrough:
+  - New endpoint: `GET /api/chat/stream?question=...&mode=analyst`
+  - EventSource frontend with progressive rendering
+  - Real-time thinking process (word-by-word streaming)
+  - Actual SQL extraction from `execution_trace` attributes (`snow.ai.observability.agent.tool.cortex_analyst.sql_query`)
+  - Auto-collapse thinking when response completes
+- **CHARTS**: Migrated Chart.js → Vega-Lite:
+  - Listen to `response.chart` SSE event
+  - Render native Vega-Lite v5 specs from agent
+  - Dark theme config matching UI
+  - Interactive tooltips, export PNG/SVG
+- **LAYOUT**: Fixed single-column stacking (no side-by-side grid issue):
+  - Added `message-content-wrapper` for vertical flexbox
+  - Order: Thinking → SQL → Answer → Visualization
+- Documentation: RUNLOG.md (14 steps), SNOWFLAKE_PAT_GUIDE.md, FIX_SUMMARY.md, STREAMING_IMPLEMENTATION.md, CHART_INVESTIGATION.md, VEGA_MIGRATION_COMPLETE.md.
 
 Next steps
-- Optional: enable GitHub Pages for `/docs`; add social preview link in README.
-- Record demo video snippet of the three flows.
-- Consider restoring paid Stripe flow later or document free demo limitations.
+- Optional: Add loading spinner during thinking stream.
+- Optional: Syntax highlighting for SQL code blocks.
+- Demo video recording showing live streaming + charts.
 
 Active decisions
-- Outputs live under `data/raw` and `data/processed`; these are gitignored.
-- Use `rightmove_scraper.cli` directly for scraping 10 listings; geopy used for ADDRESS locally.
-- Secrets and Snowflake-only scripts are untracked and ignored in this portfolio repo.
-- Backend Worker now calls Snowflake Cortex Agents REST endpoint (`RIGHTMOVE_ANALYSIS` in `SNOWFLAKE_INTELLIGENCE.AGENTS`) with PAT auth (`SNOWFLAKE_PAT_TOKEN`); expects SNOWFLAKE_AGENT_* env vars and no longer uses SQL API fallback.
+- Analyst mode uses streaming (`/api/chat/stream`), Search mode uses batch (`POST /api/chat`).
+- Vega-Lite chosen over Chart.js for native Cortex compatibility (industry standard, zero transformation).
+- Single-column layout enforced via content wrapper flexbox.
+- PAT token approach preferred over key-pair JWT (simpler, Snowflake recommendation for 2025+).
+- Correlation IDs logged for every request; execution_trace events captured for SQL visibility.
