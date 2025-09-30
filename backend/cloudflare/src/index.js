@@ -118,26 +118,36 @@ function parseAgentResponse(agentPayload){
       if (evt.event === 'execution_trace' && evt.data) {
         const trace = evt.data;
         
-        // Check for SQL in various trace fields
-        if (trace.input?.query) {
+        // Log full trace for analysis
+        console.log(`[execution_trace] Full:`, JSON.stringify(trace));
+        
+        // The actual generated SQL is in trace.output.sql for text2sql tools
+        if (trace.output?.sql) {
           sqlCommands.push({
             tool: trace.tool_name || 'analyst',
-            sql: trace.input.query
-          });
-        } else if (trace.sql) {
-          sqlCommands.push({
-            tool: trace.tool_name || trace.tool_type || 'analyst',
-            sql: trace.sql
-          });
-        } else if (trace.execution?.sql) {
-          sqlCommands.push({
-            tool: trace.tool_name || 'analyst',
-            sql: trace.execution.sql
+            type: 'generated',
+            sql: trace.output.sql
           });
         }
         
-        // Log for debugging
-        console.log(`[execution_trace] ${JSON.stringify(trace).substring(0, 300)}`);
+        // Execution results may also have SQL
+        if (trace.output?.result?.sql) {
+          sqlCommands.push({
+            tool: trace.tool_name || 'analyst',
+            type: 'executed',
+            sql: trace.output.result.sql
+          });
+        }
+        
+        // Input query (natural language for context)
+        if (trace.input?.query && !trace.output?.sql) {
+          // Only include if we don't have actual SQL yet
+          sqlCommands.push({
+            tool: trace.tool_name || 'analyst',
+            type: 'query',
+            sql: trace.input.query
+          });
+        }
       }
       
       // Capture tool use events
@@ -160,6 +170,7 @@ function parseAgentResponse(agentPayload){
       let answer = '';
       let dataRows = null;
       
+      // Also check response content for SQL (tool_result items)
       for (const item of content) {
         if (item.type === 'text') {
           answer += item.text || '';
@@ -173,6 +184,16 @@ function parseAgentResponse(agentPayload){
             });
             return obj;
           });
+        } else if (item.type === 'tool_result' && item.tool_result) {
+          // SQL might be in tool_result
+          const result = item.tool_result;
+          if (result.sql) {
+            sqlCommands.push({
+              tool: result.tool_name || 'analyst',
+              type: 'result',
+              sql: result.sql
+            });
+          }
         }
       }
       

@@ -120,10 +120,10 @@ function renderSQLCommands(parent, sqlArray){
   
   const details = document.createElement('details');
   details.className = 'sql-details';
-  details.open = true; // Expanded by default to show SQL
+  details.open = true; // Expanded by default to show queries
   
   const summary = document.createElement('summary');
-  summary.textContent = `⚡ SQL Commands (${sqlArray.length})`;
+  summary.textContent = `⚡ Cortex Analyst Queries (${sqlArray.length})`;
   summary.style.cursor = 'pointer';
   summary.style.color = '#58a6ff';
   summary.style.fontSize = '0.9em';
@@ -133,15 +133,42 @@ function renderSQLCommands(parent, sqlArray){
   const container = document.createElement('div');
   container.style.marginTop = '8px';
   
+  const intro = document.createElement('div');
+  intro.style.fontSize = '0.85em';
+  intro.style.color = '#6b7280';
+  intro.style.marginBottom = '12px';
+  intro.textContent = 'The agent used these queries to analyze your data:';
+  container.appendChild(intro);
+  
   sqlArray.forEach((item, idx) => {
     const wrapper = document.createElement('div');
-    wrapper.style.marginBottom = '12px';
+    wrapper.style.marginBottom = '16px';
+    
+    const header = document.createElement('div');
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'center';
+    header.style.marginBottom = '6px';
     
     const label = document.createElement('div');
-    label.textContent = `Tool: ${item.tool || 'unknown'}`;
+    const toolName = item.tool || 'analyst';
+    const typeLabel = item.type === 'query' ? 'Natural Language Query → SQL' : 
+                      item.type === 'generated' ? 'Generated SQL' :
+                      item.type === 'executed' ? 'Executed SQL' : 'SQL';
+    label.textContent = `${typeLabel} (${toolName})`;
     label.style.fontSize = '0.8em';
     label.style.color = '#6b7280';
-    label.style.marginBottom = '4px';
+    
+    const badge = document.createElement('span');
+    badge.textContent = `Query ${idx + 1}`;
+    badge.style.fontSize = '0.75em';
+    badge.style.color = '#58a6ff';
+    badge.style.padding = '2px 8px';
+    badge.style.backgroundColor = 'rgba(88, 166, 255, 0.1)';
+    badge.style.borderRadius = '12px';
+    
+    header.appendChild(label);
+    header.appendChild(badge);
     
     const pre = document.createElement('pre');
     pre.style.fontSize = '0.85em';
@@ -151,9 +178,11 @@ function renderSQLCommands(parent, sqlArray){
     pre.style.borderRadius = '6px';
     pre.style.borderLeft = '3px solid #58a6ff';
     pre.style.overflowX = 'auto';
-    pre.textContent = item.sql || 'No SQL captured';
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.wordBreak = 'break-word';
+    pre.textContent = item.sql || 'No query captured';
     
-    wrapper.appendChild(label);
+    wrapper.appendChild(header);
     wrapper.appendChild(pre);
     container.appendChild(wrapper);
   });
