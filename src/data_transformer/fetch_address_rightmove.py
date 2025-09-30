@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 from geopy.geocoders import Nominatim
@@ -53,13 +54,13 @@ def geocode_location(location_str):
         return None
 
 engine = create_engine(URL(
-                account = "ZSVBFIR-AJ21181",
-                user = "KEVINLEE",
-                password = "Lihanwen19971411",
-                role = "ACCOUNTADMIN",
-                warehouse = "COMPUTE_WH",
-                database = "RIGHTMOVE_LONDON_SELL",
-                schema = "CLOUDRUN_DXLVF"))
+                account = os.getenv("SNOWFLAKE_ACCOUNT"),
+                user = os.getenv("SNOWFLAKE_USER"),
+                password = os.getenv("SNOWFLAKE_PASSWORD"),
+                role = os.getenv("SNOWFLAKE_ROLE", "ACCOUNTADMIN"),
+                warehouse = os.getenv("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
+                database = os.getenv("SNOWFLAKE_DATABASE", "RIGHTMOVE_LONDON_SELL"),
+                schema = os.getenv("SNOWFLAKE_SCHEMA", "CLOUDRUN_DXLVF")))
 
 with engine.connect() as conn:
     try:

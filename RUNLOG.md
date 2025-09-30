@@ -29,7 +29,7 @@ HTTP 503 errors when Cloudflare Worker calls Snowflake Cortex Agent
 **Hypothesis:** Need to see actual error messages from production
 **Test:** Query Worker observability logs for recent errors
 **Result:** 
-- Worker is deployed on different account (axiuluo40@gmail.com)
+- Worker is deployed on different account
 - Worker URL: https://london-portfolio-backend.axiuluo40.workers.dev
 - Pages domain (london-property-analysis.uk) returns 405 - routing issue
 - Worker returns 503 "Cortex backend currently unavailable"

@@ -108,3 +108,19 @@ TABLE_FIX.md
 UI_UX_IMPROVEMENTS.md
 VERIFICATION_CHECKLIST.md
 VEGA_MIGRATION_COMPLETE.md
+
+# Additional security patterns
+*.key
+*.pem
+*.p8
+*.p12
+*.pfx
+*.crt
+*.cer
+*password*
+*secret*
+*token*
+.credentials
+credentials.json
+service-account.json
+snowflake_creds.txt
