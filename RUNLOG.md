@@ -128,40 +128,80 @@ HTTP 503 errors when Cloudflare Worker calls Snowflake Cortex Agent
 - Agent exists and works via MCP (Python/SQL-based approach)
 - **Conclusion**: Cortex Agents REST API may not be publicly available yet, or requires different authentication/endpoint structure
 
-###  Step 13: Final Status
+### Step 13: Final Fix - Correct :run Endpoint
 **Time:** 2025-09-29 11:30
+**Hypothesis:** Use :run suffix instead of /actions/runs
+**Test:** Updated endpoint to /api/v2/databases/{db}/schemas/{schema}/agents/{name}:run
 **Result:**
-- ✅ **MAJOR PROGRESS**: Fixed authentication by using correct Snowflake account
-- ✅ Worker now successfully authenticates with PAT token (no more 526 errors)
-- ❌ **BLOCKING**: Cortex Agents REST API endpoint returns 404
-- **Workaround needed**: Consider using Snowflake SQL API to call agents via stored procedures or functions
+- ✅ **SUCCESS!** Analyst mode working perfectly
+- Added SSE stream parsing to handle agent responses
+- Response time: ~24-36 seconds (within timeout)
+- Returns rich answers with tables and insights
+
+### Step 14: Fix Search Endpoint  
+**Time:** 2025-09-29 11:35
+**Hypothesis:** Search service needs v2 endpoint and no columns parameter
+**Test:** Updated to /api/v2/databases/{db}/schemas/{schema}/cortex-search-services/{name}:query
+**Result:**
+- ✅ **SUCCESS!** Search mode working perfectly
+- Returns 10 properties with match scores
+- Semantic search finding relevant properties
+
+## Final Status - RESOLVED ✅
+
+**All Success Criteria Met:**
+- ✅ GET /api/health returns 200 {ok:true}
+- ✅ OPTIONS /api/chat returns 204 with CORS headers
+- ✅ POST /api/chat {mode:"analyst"} returns 200 with valid JSON
+- ✅ POST /api/chat {mode:"search"} returns 200 with valid JSON  
+- ✅ No more 503/526 errors - authentication working
+- ✅ Response times acceptable (24-36s for analyst, <2s for search)
 
 ## Summary of Findings
 
-### What Works
-✅ Worker deployed and accessible at https://london-portfolio-backend.axiuluo40.workers.dev
-✅ Health check endpoint implemented: GET /api/health returns 200
-✅ CORS properly configured: OPTIONS /api/chat returns 204
-✅ Mode support added (analyst/search)
-✅ Retry logic and timeout control implemented
-✅ Enhanced error logging shows Snowflake is returning 526
+### ✅ What Works (COMPLETE SOLUTION)
+- Worker deployed: https://london-portfolio-backend.axiuluo40.workers.dev
+- Health check: GET /api/health returns 200
+- CORS: OPTIONS /api/chat returns 204 with proper headers
+- **Analyst mode**: POST /api/chat {mode:"analyst"} returns 200 with rich insights
+- **Search mode**: POST /api/chat {mode:"search"} returns 200 with semantic results
+- Retry logic, timeout control, correlation IDs
+- SSE stream parsing for agent responses
+- Error handling with specific status codes
 
-### Root Cause
-❌ Snowflake API is returning HTTP 526 "error code: 526"
-❌ This is NOT a Cloudflare SSL error - it's coming from Snowflake itself
-❌ The 526 error occurs for both v0 and v2 API endpoints
-❌ Both "Snowflake" and "Bearer" auth prefixes fail
+### 🔧 Root Causes Identified & Fixed
 
-### Blocking Issue
-The 526 error from Snowflake is preventing the Worker from functioning. This appears to be:
-1. An authentication/authorization issue with the PAT token
-2. A configuration issue with the Snowflake agent
-3. A network/firewall restriction
+1. **Wrong Snowflake Account (526 error)**
+   - **Problem**: Worker used KA89655, but PAT was for ZSVBFIR-AJ21181
+   - **Fix**: Updated SNOWFLAKE_ACCOUNT in wrangler.toml
+   - **Result**: 526 → 404 (auth working)
 
-### Recommended Next Steps
-1. Verify the SNOWFLAKE_PAT_TOKEN is valid and has correct permissions
-2. Check if the agent RIGHTMOVE_ANALYSIS exists in SNOWFLAKE_INTELLIGENCE.AGENTS
-3. Test the exact same request using curl directly (not through Worker)
-4. Contact Snowflake support about the 526 error code
-5. Consider using the SQL API endpoint instead of Cortex Agents as a fallback
+2. **Wrong API Endpoint (404 error)**
+   - **Problem**: Used `/actions/runs` instead of `:run` suffix
+   - **Fix**: Updated to `/api/v2/databases/{db}/schemas/{schema}/agents/{name}:run`
+   - **Result**: 404 → 200 (endpoint working)
+
+3. **SSE Stream Format**
+   - **Problem**: Agent returns Server-Sent Events, not JSON
+   - **Fix**: Added SSE parser to extract final `response` event
+   - **Result**: Proper text extraction with tables
+
+4. **Search Endpoint Path**
+   - **Problem**: Wrong v0 path and invalid columns parameter
+   - **Fix**: Updated to `/api/v2/.../cortex-search-services/{name}:query`
+   - **Result**: Search working with semantic results
+
+### 🎯 Implementation Details
+
+**Key Changes Made:**
+- Snowflake account corrected to ZSVBFIR-AJ21181
+- Cortex Agents endpoint: `.../agents/{name}:run` with SSE parsing
+- Cortex Search endpoint: `.../cortex-search-services/{name}:query` without columns
+- Authentication: Bearer PAT token (auto-detect, no X-Snowflake header needed)
+- Enhanced logging with correlation IDs and request tracking
+
+**Performance:**
+- Analyst queries: 24-36 seconds (LLM processing time)
+- Search queries: <2 seconds
+- All within acceptable range for AI-powered responses
 

@@ -59,9 +59,80 @@ function requiredString(value, name){
   return value;
 }
 
+// Parse Server-Sent Events (SSE) stream from Cortex Agents API
+function parseSSEStream(sseText){
+  const events = [];
+  const lines = sseText.split('\n');
+  let currentEvent = null;
+  
+  for (const line of lines) {
+    if (line.startsWith('event: ')) {
+      if (currentEvent) events.push(currentEvent);
+      currentEvent = { event: line.substring(7).trim(), data: null };
+    } else if (line.startsWith('data: ')) {
+      if (currentEvent) {
+        const dataStr = line.substring(6);
+        try {
+          currentEvent.data = JSON.parse(dataStr);
+        } catch (e) {
+          currentEvent.data = dataStr;
+        }
+      }
+    } else if (line.trim() === '' && currentEvent) {
+      events.push(currentEvent);
+      currentEvent = null;
+    }
+  }
+  if (currentEvent) events.push(currentEvent);
+  
+  return events;
+}
+
 function parseAgentResponse(agentPayload){
   if (!agentPayload) return { text: 'No response from agent.', records: null, viz: null };
 
+  // Handle SSE stream response
+  if (typeof agentPayload === 'string' && agentPayload.includes('event:')) {
+    const events = parseSSEStream(agentPayload);
+    
+    // Find the final 'response' event which contains the complete answer
+    const responseEvent = events.find(e => e.event === 'response');
+    if (responseEvent?.data) {
+      const content = responseEvent.data.content || [];
+      let answer = '';
+      let dataRows = null;
+      
+      for (const item of content) {
+        if (item.type === 'text') {
+          answer += item.text || '';
+        } else if (item.type === 'table' && item.table?.rows) {
+          dataRows = item.table.rows.map((row) => {
+            const obj = {};
+            const cols = item.table.columns || [];
+            row.forEach((val, idx) => {
+              const key = cols[idx]?.name || `col_${idx}`;
+              obj[key] = val;
+            });
+            return obj;
+          });
+        }
+      }
+      
+      return { text: answer || 'No response from agent.', records: dataRows, viz: null };
+    }
+    
+    // Fallback: collect all text deltas
+    let allText = '';
+    for (const evt of events) {
+      if (evt.event === 'response.text' || evt.event === 'response.text.delta') {
+        allText += evt.data?.text || '';
+      }
+    }
+    
+    return { text: allText || 'No response from agent.', records: null, viz: null };
+  }
+
+  // Handle JSON response (legacy or MCP format)
   const responseEnvelope = agentPayload?.result || agentPayload?.response || agentPayload;
 
   const messages = responseEnvelope?.messages;
@@ -140,11 +211,13 @@ async function callCortexSearch(env, query) {
   const token = requiredString(env.SNOWFLAKE_PAT_TOKEN, 'SNOWFLAKE_PAT_TOKEN');
 
   const encodedParts = [database, schema, serviceName].map((p) => encodeURIComponent(p));
-  const url = `https://${host}/api/v0/services/${encodedParts[0]}/${encodedParts[1]}/${encodedParts[2]}:query`;
+  const url = `https://${host}/api/v2/databases/${encodedParts[0]}/schemas/${encodedParts[1]}/cortex-search-services/${encodedParts[2]}:query`;
+  
+  console.log(`[callCortexSearch] URL: ${url}`);
 
   const body = {
     query: query,
-    columns: ["*"], // Return all columns
+    // Don't specify columns - let search service return defaults
     limit: 10
   };
 
@@ -215,16 +288,15 @@ async function callCortexAgent(env, prompt, mode = 'analyst'){
   const agentName = env.SNOWFLAKE_AGENT_NAME || 'RIGHTMOVE_ANALYSIS';
   const token = requiredString(env.SNOWFLAKE_PAT_TOKEN, 'SNOWFLAKE_PAT_TOKEN');
 
-  // Use Cortex Agents API endpoint structure from Snowflake quickstarts
-  const url = `https://${host}/api/v2/cortex/agent/completions`;
+  // Use correct Cortex Agents Run API endpoint with :run suffix
+  const url = `https://${host}/api/v2/databases/${encodeURIComponent(database)}/schemas/${encodeURIComponent(schema)}/agents/${encodeURIComponent(agentName)}:run`;
   
   console.log(`[callCortexAgent] URL: ${url}`);
   console.log(`[callCortexAgent] Host: ${host}`);
   console.log(`[callCortexAgent] Agent: ${database}.${schema}.${agentName}`);
 
-  // Use the format from Snowflake Agent API documentation
+  // Use Cortex Agents Run API format (per Snowflake docs)
   const body = {
-    agent: `${database}.${schema}.${agentName}`,
     messages: [
       {
         role: 'user',
@@ -238,11 +310,12 @@ async function callCortexAgent(env, prompt, mode = 'analyst'){
     ]
   };
 
-  // Use Bearer token format - try without the X-Snowflake header first
-  // Some Snowflake REST endpoints auto-detect token type
+  // Use Bearer token format with PAT
+  // Accept: application/json tries to get non-streaming response
+  // If that doesn't work, we'll need to parse SSE
   const headers = {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    'Accept': 'application/json',  // Request non-streaming
     'Authorization': `Bearer ${token}`,
     'User-Agent': 'london-portfolio-worker/1.1'
   };
@@ -279,8 +352,12 @@ async function callCortexAgent(env, prompt, mode = 'analyst'){
       error.requestId = requestId;
       throw error;
     }
-    const json = await res.json();
-    return parseAgentResponse(json);
+    
+    // Get response as text first (SSE stream format)
+    const responseText = await res.text();
+    console.log(`[callCortexAgent] Response preview: ${responseText.substring(0, 200)}...`);
+    
+    return parseAgentResponse(responseText);
   } catch (error) {
     clearTimeout(timeout);
     if (error.name === 'AbortError') {
