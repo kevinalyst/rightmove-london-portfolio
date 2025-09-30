@@ -51,8 +51,9 @@ button.stop{background:#ff6b6b;color:#fff;box-shadow:0 6px 14px rgba(255,107,107
 .viz{margin-top:16px;width:100%;border-radius:8px;overflow:hidden}
 .viz .viz-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:16px 16px 0;background:#0d1117}
 .viz .viz-header strong{color:#58a6ff;font-size:1.1em}
-.table-wrap{overflow-x:auto;width:100%;background:#0d1117;border:1px solid #1f2328;border-radius:8px}
-table{width:100%;min-width:600px;border-collapse:separate;border-spacing:0}
+.table-wrap{overflow-x:auto;width:100%;background:#0d1117;border:1px solid #1f2328;border-radius:8px;position:relative}
+table{width:100%;border-collapse:separate;border-spacing:0;table-layout:auto}
+table.responsive{table-layout:fixed}
 .vega-chart-wrapper{width:100%!important;max-width:100%!important;overflow:hidden}
 thead th{position:sticky;top:0;background:#11151a;border-bottom:1px solid #2d333b}
 th,td{padding:6px 8px;border-bottom:1px solid #1f2328;border-right:1px solid #1f2328;white-space:nowrap}
@@ -62,16 +63,22 @@ th:first-child,td:first-child{border-left:1px solid #1f2328}
 .footer a{color:var(--muted);margin-right:12px}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 @media (max-width: 700px){.pills-row{grid-template-columns:1fr}.card{padding:16px}}
+/* Responsive table sizing - adapts to container like charts */
+table.auto-fit{min-width:100%;max-width:100%}
+table.auto-fit th,table.auto-fit td{word-wrap:break-word;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+table.wide-data{min-width:800px}
+table.narrow-data{min-width:100%}
+
 @media (max-width: 768px){
-  table{min-width:400px;font-size:0.9em}
-  th,td{padding:4px 6px}
+  table{font-size:0.9em}
+  table.auto-fit th,table.auto-fit td{max-width:120px;padding:4px 6px}
   .viz{margin-left:-8px;margin-right:-8px}
   .actions{gap:8px}
   button{padding:8px 12px;font-size:0.9em}
 }
 @media (max-width: 480px){
-  table{min-width:300px;font-size:0.85em}
-  th,td{padding:3px 5px}
+  table{font-size:0.85em}
+  table.auto-fit th,table.auto-fit td{max-width:80px;padding:3px 5px;font-size:0.8em}
   .message{grid-template-columns:60px 1fr;gap:6px}
   .role-badge{font-size:10px}
 }

@@ -252,26 +252,83 @@ function renderTable(parent, rows){
     parent.appendChild(small);
     return;
   }
+  
   const headers = Array.from(rows.reduce((set, r) => { Object.keys(r || {}).forEach(k => set.add(k)); return set; }, new Set()));
   const wrap = document.createElement('div');
   wrap.className = 'table-wrap';
+  
   const table = document.createElement('table');
+  
+  // Auto-adjust table sizing based on content (like Snowflake UI)
+  const columnCount = headers.length;
+  const maxRowLength = Math.max(...rows.map(r => Object.values(r).join('').length));
+  const hasLongData = maxRowLength > 200;
+  const hasManyColumns = columnCount > 6;
+  
+  if (hasManyColumns || hasLongData) {
+    // Wide data: allow horizontal scroll with minimum width
+    table.className = 'wide-data';
+    table.style.minWidth = `${Math.max(800, columnCount * 120)}px`;
+  } else if (columnCount <= 3) {
+    // Narrow data: fit to container width
+    table.className = 'auto-fit narrow-data';
+    table.style.width = '100%';
+    table.style.tableLayout = 'fixed';
+  } else {
+    // Medium data: balance between fit and readability
+    table.className = 'auto-fit';
+    table.style.width = '100%';
+    table.style.minWidth = `${columnCount * 100}px`;
+  }
+  
+  console.log(`[renderTable] ${rows.length} rows, ${columnCount} columns, layout: ${table.className}`);
+  
   const thead = document.createElement('thead');
   const trh = document.createElement('tr');
   for (const h of headers){
     const th = document.createElement('th');
     th.textContent = h;
+    
+    // Set column width hints for fixed layout
+    if (table.className.includes('auto-fit')) {
+      if (h.toLowerCase().includes('id')) {
+        th.style.width = '15%';
+      } else if (h.toLowerCase().includes('price') || h.toLowerCase().includes('value')) {
+        th.style.width = '20%';
+      } else if (h.toLowerCase().includes('type') || h.toLowerCase().includes('property')) {
+        th.style.width = '25%';
+      } else {
+        th.style.width = `${Math.floor(100 / columnCount)}%`;
+      }
+    }
+    
     trh.appendChild(th);
   }
   thead.appendChild(trh);
   table.appendChild(thead);
+  
   const tbody = document.createElement('tbody');
   for (const r of rows){
     const tr = document.createElement('tr');
     for (const h of headers){
       const td = document.createElement('td');
       const val = r[h];
-      td.textContent = val == null ? '' : String(val);
+      const displayVal = val == null ? '' : String(val);
+      
+      // Format specific data types
+      if (h.toLowerCase().includes('price') && !isNaN(Number(val))) {
+        td.textContent = `£${Number(val).toLocaleString()}`;
+      } else if (h.toLowerCase().includes('url') && displayVal.startsWith('http')) {
+        const link = document.createElement('a');
+        link.href = displayVal;
+        link.textContent = 'View';
+        link.target = '_blank';
+        link.style.color = '#58a6ff';
+        td.appendChild(link);
+      } else {
+        td.textContent = displayVal;
+      }
+      
       tr.appendChild(td);
     }
     tbody.appendChild(tr);
