@@ -385,10 +385,72 @@ function renderVizBelow(messageEl, data, viz){
   messageEl.appendChild(wrap);
 }
 
+// Infer visualization spec from response data and answer text
+function inferVizFromResponse(answerText, data) {
+  if (!data || !Array.isArray(data) || data.length === 0) return null;
+  
+  const firstRow = data[0];
+  const columns = Object.keys(firstRow);
+  
+  // Need at least 2 columns for meaningful viz
+  if (columns.length < 2) return null;
+  
+  const lowerAnswer = (answerText || '').toLowerCase();
+  
+  // Detect if this should have a visualization
+  const hasGrouping = lowerAnswer.includes('by borough') || 
+                      lowerAnswer.includes('by zone') ||
+                      lowerAnswer.includes('by property type') ||
+                      lowerAnswer.includes('by type') ||
+                      lowerAnswer.includes('across') ||
+                      lowerAnswer.includes('comparison') ||
+                      lowerAnswer.includes('distribution') ||
+                      columns.some(c => c.toLowerCase().includes('zone') || c.toLowerCase().includes('borough'));
+  
+  if (!hasGrouping) return null;
+  
+  // Find likely X axis (categorical column)
+  const xColumn = columns.find(c => {
+    const lower = c.toLowerCase();
+    return lower.includes('zone') ||
+           lower.includes('borough') ||
+           lower.includes('type') ||
+           lower.includes('name') ||
+           lower.includes('category');
+  }) || columns[0]; // Fallback to first column
+  
+  // Find likely Y axis (numeric column with meaningful name)
+  const yColumn = columns.find(c => {
+    const lower = c.toLowerCase();
+    return lower.includes('price') ||
+           lower.includes('count') ||
+           lower.includes('avg') ||
+           lower.includes('average') ||
+           lower.includes('total') ||
+           lower.includes('median') ||
+           lower.includes('sum');
+  }) || columns.find(c => c !== xColumn && typeof firstRow[c] === 'number') || columns[1];
+  
+  // Determine chart type
+  let vizType = 'bar';
+  if (lowerAnswer.includes('trend') || lowerAnswer.includes('over time') || lowerAnswer.includes('monthly')) {
+    vizType = 'line';
+  } else if (lowerAnswer.includes('distribution') || lowerAnswer.includes('histogram')) {
+    vizType = 'histogram';
+  }
+  
+  if (xColumn && yColumn && xColumn !== yColumn) {
+    console.log(`[inferViz] Detected viz: ${vizType} chart with x=${xColumn}, y=${yColumn}`);
+    return { type: vizType, x: xColumn, y: yColumn };
+  }
+  
+  return null;
+}
+
 // Default mode for manual questions when no pill is used
 function currentMode(){ return 'analyst'; }
 
-// Create streaming message container with live sections
+// Create streaming message container with single-column layout
 function createStreamingMessage(){
   const msg = document.createElement('div');
   msg.className = 'message assistant';
@@ -398,11 +460,19 @@ function createStreamingMessage(){
   badge.textContent = 'Assistant';
   msg.appendChild(badge);
   
-  // Create sections in order: thinking → answer → SQL
+  // NEW: Content wrapper to force vertical stacking
+  const contentWrapper = document.createElement('div');
+  contentWrapper.className = 'message-content-wrapper';
+  contentWrapper.style.display = 'flex';
+  contentWrapper.style.flexDirection = 'column';
+  contentWrapper.style.gap = '12px';
+  contentWrapper.style.width = '100%';
+  contentWrapper.style.minWidth = '0';
+  
+  // Row 1: Thinking section
   const thinkingSection = document.createElement('details');
   thinkingSection.className = 'thinking-live';
   thinkingSection.open = true;  // Expanded during streaming
-  thinkingSection.style.marginBottom = '16px';
   
   const thinkingSummary = document.createElement('summary');
   thinkingSummary.textContent = '🤔 Thinking...';
@@ -424,22 +494,39 @@ function createStreamingMessage(){
   
   thinkingSection.appendChild(thinkingSummary);
   thinkingSection.appendChild(thinkingContent);
-  msg.appendChild(thinkingSection);
+  
+  // Row 2: SQL section
+  const sqlSection = document.createElement('div');
+  sqlSection.className = 'sql-section';
+  sqlSection.style.display = 'none';  // Hidden until SQL arrives
+  
+  // Row 3: Answer + Viz section
+  const outputSection = document.createElement('div');
+  outputSection.className = 'output-section';
+  outputSection.style.display = 'flex';
+  outputSection.style.flexDirection = 'column';
+  outputSection.style.gap = '12px';
   
   const answerDiv = document.createElement('div');
   answerDiv.className = 'message-text';
   answerDiv.style.display = 'none';  // Hidden until answer arrives
-  msg.appendChild(answerDiv);
   
-  const sqlSection = document.createElement('div');
-  sqlSection.className = 'sql-section';
-  sqlSection.style.display = 'none';  // Hidden until SQL arrives
-  msg.appendChild(sqlSection);
+  const vizPlaceholder = document.createElement('div');
+  vizPlaceholder.className = 'viz-placeholder';
   
+  outputSection.appendChild(answerDiv);
+  outputSection.appendChild(vizPlaceholder);
+  
+  // Add all sections to wrapper in order
+  contentWrapper.appendChild(thinkingSection);
+  contentWrapper.appendChild(sqlSection);
+  contentWrapper.appendChild(outputSection);
+  
+  msg.appendChild(contentWrapper);
   els.messages.appendChild(msg);
   els.messages.scrollTop = els.messages.scrollHeight;
   
-  return { msg, thinkingSection, thinkingSummary, thinkingContent, answerDiv, sqlSection };
+  return { msg, thinkingSection, thinkingSummary, thinkingContent, answerDiv, sqlSection, vizPlaceholder };
 }
 
 async function sendChatStreaming({ overrideMode = null, overrideViz = null } = {}){
@@ -461,7 +548,7 @@ async function sendChatStreaming({ overrideMode = null, overrideViz = null } = {
   els.input.value='';
   setState(State.querying);
 
-  const { msg, thinkingSection, thinkingSummary, thinkingContent, answerDiv, sqlSection } = createStreamingMessage();
+  const { msg, thinkingSection, thinkingSummary, thinkingContent, answerDiv, sqlSection, vizPlaceholder } = createStreamingMessage();
   
   const streamUrl = joinUrl(config.backend_base_url, `/api/chat/stream?question=${encodeURIComponent(text)}&mode=${mode}`);
   
@@ -469,7 +556,7 @@ async function sendChatStreaming({ overrideMode = null, overrideViz = null } = {
   let statusText = '';
   let answerText = '';
   let sqlQueries = [];
-  let finalData = null;
+  let tableData = null;
   
   try {
     const eventSource = new EventSource(streamUrl);
@@ -524,30 +611,48 @@ async function sendChatStreaming({ overrideMode = null, overrideViz = null } = {
       els.messages.scrollTop = els.messages.scrollHeight;
     });
     
+    // Listen for table data in response.table event
+    eventSource.addEventListener('response.table', (e) => {
+      const data = JSON.parse(e.data);
+      if (data.table?.rows) {
+        tableData = data.table.rows;
+        console.log('[response.table] Received table data:', tableData.length, 'rows');
+      }
+    });
+    
     eventSource.addEventListener('response', (e) => {
       const data = JSON.parse(e.data);
       const content = data.content || [];
       
-      // Extract final answer if not already shown
+      // Extract final answer and table data if not already shown
       if (!answerText) {
         for (const item of content) {
           if (item.type === 'text') {
             answerText += item.text || '';
           } else if (item.type === 'table' && item.table?.rows) {
-            finalData = { rows: item.table.rows, columns: item.table.columns };
+            tableData = item.table.rows;
+            console.log('[response] Extracted table data:', tableData.length, 'rows');
           }
         }
         answerDiv.textContent = answerText;
         answerDiv.style.display = 'block';
       }
       
-      // Auto-collapse thinking
+      // Auto-collapse thinking and SQL
       thinkingSection.open = false;
       thinkingSummary.textContent = '🤔 Thinking Process (click to expand)';
       
-      // Render viz if we have data and viz spec
-      if (finalData && viz) {
-        renderVizBelow(msg, finalData.rows, viz);
+      // Auto-detect and render visualization
+      if (tableData) {
+        // Use explicit viz if provided from pill click
+        const vizSpec = viz || inferVizFromResponse(answerText, tableData);
+        
+        if (vizSpec) {
+          console.log('[viz] Rendering with spec:', vizSpec);
+          renderVizBelow(vizPlaceholder, tableData, vizSpec);
+        } else {
+          console.log('[viz] No viz spec inferred for data');
+        }
       }
       
       eventSource.close();
