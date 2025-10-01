@@ -53,9 +53,9 @@ flowchart LR
 
 ### Technology Stack
 - **Frontend**: Vanilla JS + Vega-Lite, EventSource SSE streaming
-- **Backend**: Cloudflare Workers (london-portfolio-backend.axiuluo40.workers.dev)
-- **AI**: Snowflake Cortex Agents + Search (account: ZSVBFIR-AJ21181)
-- **Charts**: Native Vega-Lite v5 (industry standard, used by Tableau/PowerBI)
+- **Backend**: Cloudflare Workers
+- **AI**: Snowflake Cortex Agents + Search
+- **Charts**: Native Vega-Lite v5
 - **Data**: 28k+ London property listings with price/area/zone analysis
 
 ### Advanced Features
