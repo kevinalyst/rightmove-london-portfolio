@@ -15,8 +15,8 @@
 
 **Production-ready property market intelligence platform powered by Snowflake Cortex AI with live streaming analysis.**
 
-### 🚀 Live Demo
-**Visit**: [london-property-analysis.uk](https://london-property-analysis.uk/?debug=1)
+### 🚀 Demo Video
+**Watch**: [london-property-analysis.uk]([https://london-property-analysis.uk/?debug=1](https://youtu.be/Rr11Ent0O-M))
 
 Features:
 - **Live streaming** Cortex Agent analysis (real-time thinking process)
